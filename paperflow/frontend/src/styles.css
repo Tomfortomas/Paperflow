@@ -439,3 +439,80 @@ button {
 .warning.small {
   font-size: 0.8rem;
 }
+
+/* Phase 4 — Field Map */
+.field-map-section {
+  background: #fffaf0;
+  border: 1px solid #e8dcc4;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+}
+
+.field-map-body article {
+  margin-top: 1rem;
+}
+
+.field-map-body h4 {
+  margin: 0 0 0.5rem;
+}
+
+.field-map-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.field-map-list li {
+  border-left: 3px solid #d6c7ad;
+  margin-bottom: 0.75rem;
+  padding-left: 0.75rem;
+}
+
+.field-map-milestone-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.field-map-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.field-map-timeline-item {
+  border-left: 3px solid #243b53;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.5rem;
+  padding: 0.25rem 0 0.25rem 0.75rem;
+}
+
+.field-map-year {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
+  font-weight: 700;
+}
+
+.field-map-event-type {
+  color: #607d8b;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.field-map-event-milestone { border-left-color: #d97706; }
+.field-map-event-benchmark { border-left-color: #2563eb; }
+.field-map-event-survey   { border-left-color: #7c3aed; }
+.field-map-event-dataset  { border-left-color: #15803d; }
+.field-map-event-system   { border-left-color: #475569; }
+.field-map-event-follow_up { border-left-color: #94a3b8; }
+.field-map-event-other    { border-left-color: #cbd5e1; }
+
+.meta-chip-fm {
+  background: #fef3c7;
+}
+
+.small {
+  font-size: 0.85rem;
+}

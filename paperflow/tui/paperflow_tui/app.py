@@ -473,6 +473,7 @@ class WorkspaceScreen(Screen):
         Binding("a", "ask", "Ask", show=True),
         Binding("c", "copy_quote", "Copy quote", show=True),
         Binding("1", "run_r1_search", "R1 search", show=True),
+        Binding("2", "open_field_map", "Field Map", show=True),
         Binding("s", "save_obsidian", "Save Obsidian", show=True),
         Binding("r", "rerun", "Rerun Agent", show=True),
         Binding("R", "refresh", "Refresh", show=True),
@@ -740,6 +741,127 @@ class WorkspaceScreen(Screen):
             return
         preview = quote[:60] + ("…" if len(quote) > 60 else "")
         self._set_status(Text(f"Copied quote → \"{preview}\"", style="green"))
+
+    async def action_open_field_map(self) -> None:
+        """Phase 4: open the Field Map screen for this paper."""
+
+        if (self.paper.get("status") or {}).get("stage") != "completed":
+            self._set_status(Text("Wait for the report to finish before opening Field Map.", style="yellow"))
+            return
+        await self.app.push_screen(FieldMapScreen(self.paper))
+
+
+# --------------------------------------------------------------------- Field Map screen (Phase 4)
+
+
+class FieldMapScreen(Screen):
+    """Read-only Field Map workspace: milestones, timeline, summary."""
+
+    BINDINGS = [
+        Binding("b,escape", "back", "Back", show=True),
+        Binding("g", "generate", "Generate / Rerun", show=True),
+    ]
+
+    def __init__(self, paper: Dict[str, Any]) -> None:
+        super().__init__()
+        self.paper = paper
+        self.field_map: Optional[Dict[str, Any]] = None
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        yield Static("", id="fm-header")
+        yield RichLog(id="fm-log", highlight=False, markup=True, wrap=True)
+        yield Static("[g] Generate / Rerun · [b] Back", classes="dim", id="fm-hint")
+        yield Footer()
+
+    async def on_mount(self) -> None:
+        title = str(self.paper.get("title") or self.paper.get("id"))
+        self.query_one("#fm-header", Static).update(
+            Text.assemble(("Field Map: ", "bold"), (title, "cyan"))
+        )
+        log = self.query_one("#fm-log", RichLog)
+        log.write("[dim]Press [g] to generate a Field Map for this paper.[/dim]")
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    async def action_generate(self) -> None:
+        log = self.query_one("#fm-log", RichLog)
+        log.clear()
+        log.write("[yellow]Building Field Map (milestones, timeline, taxonomies…)[/yellow]")
+        client: PaperflowClient = self.app.client
+        try:
+            if self.field_map is not None:
+                payload = await client.rerun_field_map(str(self.field_map["id"]))
+            else:
+                payload = await client.create_field_map(str(self.paper["id"]))
+        except PaperflowAPIError as exc:
+            log.write(f"[bold red]Field Map failed:[/bold red] {exc}")
+            return
+        self.field_map = payload
+        self._render_field_map(payload)
+
+    def _render_field_map(self, fm: Dict[str, Any]) -> None:
+        log = self.query_one("#fm-log", RichLog)
+        log.clear()
+        summary = fm.get("field_summary")
+        if summary:
+            log.write(f"[bold]Field Summary[/bold]\n{summary}\n")
+        self._render_tags(log, "Task taxonomy", fm.get("task_taxonomy") or [])
+        self._render_tags(log, "Datasets / benchmarks", fm.get("datasets_benchmarks") or [])
+        self._render_tags(log, "Metrics", fm.get("metrics") or [])
+        self._render_tags(log, "Method families", fm.get("method_families") or [])
+
+        milestones = fm.get("milestones") or []
+        if milestones:
+            log.write("\n[bold]Milestone papers[/bold]")
+            for ms in milestones:
+                log.write(
+                    f"  • [{ms.get('category', '?')}] {ms.get('title')}  "
+                    f"({ms.get('year') or '?'}, score {ms.get('milestone_score'):.2f})"
+                )
+                why = ms.get("why_milestone")
+                if why:
+                    log.write(f"      [dim]why:[/dim] {why}")
+                risk = ms.get("risk")
+                if risk:
+                    log.write(f"      [yellow]risk:[/yellow] {risk}")
+
+        timeline = fm.get("timeline") or []
+        if timeline:
+            log.write("\n[bold]Technology timeline[/bold]")
+            for event in timeline:
+                year = event.get("year") or "—"
+                log.write(
+                    f"  {year} · [{event.get('event_type')}] {event.get('title')}"
+                )
+                key_idea = event.get("key_idea")
+                if key_idea:
+                    log.write(f"      [dim]{key_idea}[/dim]")
+
+        problems = fm.get("open_problems") or []
+        if problems:
+            log.write("\n[bold]Open problems (R0 from report)[/bold]")
+            for claim in problems:
+                log.write(f"  • {claim.get('text')}")
+
+        trends = fm.get("recent_trends") or []
+        if trends:
+            log.write("\n[bold]Recent trends (R2)[/bold]")
+            for claim in trends:
+                log.write(f"  • [yellow]R2[/yellow] {claim.get('text')}")
+
+        opps = fm.get("research_opportunities") or []
+        if opps:
+            log.write("\n[bold]Research opportunities (R2)[/bold]")
+            for claim in opps:
+                log.write(f"  • [yellow]R2[/yellow] {claim.get('text')}")
+
+    @staticmethod
+    def _render_tags(log: RichLog, label: str, items: List[str]) -> None:
+        if not items:
+            return
+        log.write(f"[bold]{label}:[/bold] " + ", ".join(items))
 
 
 # --------------------------------------------------------------------- App

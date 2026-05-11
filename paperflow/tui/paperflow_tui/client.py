@@ -117,6 +117,24 @@ class PaperflowClient:
     async def get_related(self, paper_id: str) -> Dict[str, Any]:
         return await self._get(f"/api/papers/{paper_id}/related")
 
+    # ------------------------------------------------------------------ field map (Phase 4)
+
+    async def create_field_map(self, paper_id: str) -> Dict[str, Any]:
+        """Generate a Field Map for ``paper_id``."""
+
+        return await self._post(
+            "/api/field-maps", timeout=120.0, json={"paper_id": paper_id}
+        )
+
+    async def get_field_map(self, field_map_id: str) -> Dict[str, Any]:
+        return await self._get(f"/api/field-maps/{field_map_id}")
+
+    async def list_field_maps(self) -> List[Dict[str, Any]]:
+        return await self._get("/api/field-maps")
+
+    async def rerun_field_map(self, field_map_id: str) -> Dict[str, Any]:
+        return await self._post(f"/api/field-maps/{field_map_id}/rerun", timeout=120.0)
+
     async def import_zotero(self, item_key: Optional[str] = None) -> Dict[str, Any]:
         """Import everything (or one item) from the local Zotero library."""
 

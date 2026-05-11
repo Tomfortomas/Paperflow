@@ -6,11 +6,14 @@ import type {
   AgentStatus,
   Claim,
   Evidence,
+  FieldMap,
+  MilestonePaper,
   Paper,
   R1QueryTraceEntry,
   ReadingReport,
   RelatedWorkItem,
   TaskStatus,
+  TimelineEvent,
 } from "./types";
 import "./styles.css";
 
@@ -90,6 +93,24 @@ const UI_TEXT = {
     r1ComparisonRisk: "对比风险：",
     r1CitedBy: (count: number) => `引用 ${count}`,
     r1InfluentialCitedBy: (count: number) => `高影响力引用 ${count}`,
+    fieldMapTitle: "领域地图 (Field Map)",
+    fieldMapGenerate: "生成 Field Map",
+    fieldMapRegenerate: "重跑 Field Map",
+    fieldMapRunning: "Field Map 正在生成…",
+    fieldMapFailed: "Field Map 生成失败：",
+    fieldMapSummary: "领域摘要",
+    fieldMapTaskTaxonomy: "任务定义",
+    fieldMapDatasets: "数据集 / Benchmark",
+    fieldMapMetrics: "评价指标",
+    fieldMapMethodFamilies: "方法家族",
+    fieldMapMilestones: "里程碑论文",
+    fieldMapTimeline: "技术时间线",
+    fieldMapOpenProblems: "未解决问题",
+    fieldMapRecentTrends: "近期趋势 (R2)",
+    fieldMapOpportunities: "研究机会 (R2)",
+    fieldMapEmpty: "尚未生成 Field Map。先运行 R1 检索以获取更高质量结果。",
+    fieldMapWhy: "判定理由：",
+    fieldMapRisk: "风险：",
     statusLabels: {
       queued: "排队中",
       processing: "解析中",
@@ -191,6 +212,24 @@ const UI_TEXT = {
     r1ComparisonRisk: "Comparison risk: ",
     r1CitedBy: (count: number) => `${count} cites`,
     r1InfluentialCitedBy: (count: number) => `${count} high-impact cites`,
+    fieldMapTitle: "Field Map",
+    fieldMapGenerate: "Generate Field Map",
+    fieldMapRegenerate: "Re-run Field Map",
+    fieldMapRunning: "Building Field Map…",
+    fieldMapFailed: "Field Map failed: ",
+    fieldMapSummary: "Field Summary",
+    fieldMapTaskTaxonomy: "Task Taxonomy",
+    fieldMapDatasets: "Datasets / Benchmarks",
+    fieldMapMetrics: "Metrics",
+    fieldMapMethodFamilies: "Method Families",
+    fieldMapMilestones: "Milestone Papers",
+    fieldMapTimeline: "Technology Timeline",
+    fieldMapOpenProblems: "Open Problems",
+    fieldMapRecentTrends: "Recent Trends (R2)",
+    fieldMapOpportunities: "Research Opportunities (R2)",
+    fieldMapEmpty: "No Field Map yet. Running R1 search first will give better results.",
+    fieldMapWhy: "Why milestone: ",
+    fieldMapRisk: "Risk: ",
     statusLabels: {
       queued: "queued",
       processing: "processing",
@@ -567,6 +606,9 @@ function Workspace({
   const [r1Error, setR1Error] = useState<string | null>(null);
   const [r1Trace, setR1Trace] = useState<R1QueryTraceEntry[]>([]);
   const [relatedOverride, setRelatedOverride] = useState<RelatedWorkItem[] | null>(null);
+  const [fieldMap, setFieldMap] = useState<FieldMap | null>(null);
+  const [fieldMapRunning, setFieldMapRunning] = useState(false);
+  const [fieldMapError, setFieldMapError] = useState<string | null>(null);
 
   const isReportReady = paper.status?.stage === "completed";
   const pdfUrl = useMemo(() => client.pdfUrl(paper.id), [client, paper.id]);
@@ -626,6 +668,21 @@ function Workspace({
       setR1Error(caught instanceof Error ? caught.message : "R1 search failed");
     } finally {
       setR1Running(false);
+    }
+  }
+
+  async function buildFieldMap() {
+    setFieldMapRunning(true);
+    setFieldMapError(null);
+    try {
+      const fm = fieldMap
+        ? await client.rerunFieldMap(fieldMap.id)
+        : await client.createFieldMap(paper.id);
+      setFieldMap(fm);
+    } catch (caught) {
+      setFieldMapError(caught instanceof Error ? caught.message : "Field Map failed");
+    } finally {
+      setFieldMapRunning(false);
     }
   }
 
@@ -757,6 +814,14 @@ function Workspace({
             </details>
           ) : null}
         </section>
+
+        <FieldMapSection
+          fieldMap={fieldMap}
+          running={fieldMapRunning}
+          error={fieldMapError}
+          locale={locale}
+          onGenerate={() => void buildFieldMap()}
+        />
       </section>
 
       <SidePanel
@@ -985,6 +1050,182 @@ function PaperMetadataChips({ paper }: { paper: Paper }) {
         </span>
       ))}
     </p>
+  );
+}
+
+function FieldMapSection({
+  fieldMap,
+  running,
+  error,
+  locale,
+  onGenerate,
+}: {
+  fieldMap: FieldMap | null;
+  running: boolean;
+  error: string | null;
+  locale: Locale;
+  onGenerate: () => void;
+}) {
+  const text = UI_TEXT[locale];
+  return (
+    <section className="report-section field-map-section">
+      <div className="r1-header">
+        <h3>{text.fieldMapTitle}</h3>
+        <button type="button" onClick={onGenerate} disabled={running}>
+          {running
+            ? text.fieldMapRunning
+            : fieldMap
+            ? text.fieldMapRegenerate
+            : text.fieldMapGenerate}
+        </button>
+      </div>
+      {error ? (
+        <p className="warning">
+          {text.fieldMapFailed}
+          {error}
+        </p>
+      ) : null}
+      {!fieldMap ? <p className="muted">{text.fieldMapEmpty}</p> : null}
+      {fieldMap ? <FieldMapBody fieldMap={fieldMap} locale={locale} /> : null}
+    </section>
+  );
+}
+
+function FieldMapBody({ fieldMap, locale }: { fieldMap: FieldMap; locale: Locale }) {
+  const text = UI_TEXT[locale];
+  return (
+    <div className="field-map-body">
+      {fieldMap.field_summary ? (
+        <article className="field-map-summary">
+          <h4>{text.fieldMapSummary}</h4>
+          <p>{fieldMap.field_summary}</p>
+        </article>
+      ) : null}
+
+      <FieldMapTags label={text.fieldMapTaskTaxonomy} items={fieldMap.task_taxonomy} />
+      <FieldMapTags label={text.fieldMapDatasets} items={fieldMap.datasets_benchmarks} />
+      <FieldMapTags label={text.fieldMapMetrics} items={fieldMap.metrics} />
+      <FieldMapTags label={text.fieldMapMethodFamilies} items={fieldMap.method_families} />
+
+      {fieldMap.milestones.length > 0 ? (
+        <article>
+          <h4>{text.fieldMapMilestones}</h4>
+          <ul className="field-map-list">
+            {fieldMap.milestones.map((ms) => (
+              <FieldMapMilestone key={ms.id} milestone={ms} locale={locale} />
+            ))}
+          </ul>
+        </article>
+      ) : null}
+
+      {fieldMap.timeline.length > 0 ? (
+        <article>
+          <h4>{text.fieldMapTimeline}</h4>
+          <ol className="field-map-timeline">
+            {fieldMap.timeline.map((event) => (
+              <FieldMapTimelineEntry key={event.id} event={event} />
+            ))}
+          </ol>
+        </article>
+      ) : null}
+
+      {fieldMap.open_problems.length > 0 ? (
+        <FieldMapClaimList title={text.fieldMapOpenProblems} claims={fieldMap.open_problems} />
+      ) : null}
+      {fieldMap.recent_trends.length > 0 ? (
+        <FieldMapClaimList title={text.fieldMapRecentTrends} claims={fieldMap.recent_trends} />
+      ) : null}
+      {fieldMap.research_opportunities.length > 0 ? (
+        <FieldMapClaimList
+          title={text.fieldMapOpportunities}
+          claims={fieldMap.research_opportunities}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function FieldMapTags({ label, items }: { label: string; items: string[] }) {
+  if (!items || items.length === 0) {
+    return null;
+  }
+  return (
+    <article>
+      <h4>{label}</h4>
+      <p className="meta-chips">
+        {items.map((item, idx) => (
+          <span key={`${item}-${idx}`} className="meta-chip meta-chip-fm">
+            {item}
+          </span>
+        ))}
+      </p>
+    </article>
+  );
+}
+
+function FieldMapMilestone({
+  milestone,
+  locale,
+}: {
+  milestone: MilestonePaper;
+  locale: Locale;
+}) {
+  const text = UI_TEXT[locale];
+  return (
+    <li className="field-map-milestone">
+      <div className="field-map-milestone-row">
+        <strong>{milestone.title}</strong>
+        <span className="badge r1">{milestone.category}</span>
+        <span className="muted small">score {milestone.milestone_score.toFixed(2)}</span>
+      </div>
+      <p className="muted small">
+        {milestone.authors.slice(0, 3).join(", ")}
+        {milestone.authors.length > 3 ? ", …" : ""} {milestone.year ? `· ${milestone.year}` : ""}{" "}
+        {milestone.venue ? `· ${milestone.venue}` : ""}
+        {milestone.velocity ? ` · ${milestone.velocity}/yr` : ""}
+      </p>
+      <p className="small">
+        <em>{text.fieldMapWhy}</em>
+        {milestone.why_milestone}
+      </p>
+      {milestone.risk ? (
+        <p className="warning small">
+          {text.fieldMapRisk}
+          {milestone.risk}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+function FieldMapTimelineEntry({ event }: { event: TimelineEvent }) {
+  return (
+    <li className={`field-map-timeline-item field-map-event-${event.event_type}`}>
+      <span className="field-map-year">{event.year ?? "—"}</span>
+      <span className="field-map-event-type">{event.event_type}</span>
+      <strong>{event.title}</strong>
+      {event.venue ? <span className="muted small"> · {event.venue}</span> : null}
+      {event.key_idea ? <p className="small muted">{event.key_idea}</p> : null}
+    </li>
+  );
+}
+
+function FieldMapClaimList({ title, claims }: { title: string; claims: Claim[] }) {
+  return (
+    <article>
+      <h4>{title}</h4>
+      <ul className="field-map-list">
+        {claims.map((claim) => (
+          <li key={claim.id}>
+            <span className={`badge ${claim.reliability.toLowerCase()}`}>{claim.reliability}</span>{" "}
+            {claim.text}
+            {claim.uncertainty ? (
+              <p className="muted small">{claim.uncertainty}</p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </article>
   );
 }
 

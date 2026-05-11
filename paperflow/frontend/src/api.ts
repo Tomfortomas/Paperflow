@@ -1,6 +1,7 @@
 import type {
   AgentStatus,
   Claim,
+  FieldMap,
   Paper,
   ParsedPdfPayload,
   PaperSession,
@@ -33,6 +34,10 @@ export interface PaperflowClient {
   pdfUrl(paperId: string): string;
   runR1Search(paperId: string): Promise<R1SearchResult>;
   getRelated(paperId: string): Promise<R1SearchResult>;
+  createFieldMap(paperId: string): Promise<FieldMap>;
+  getFieldMap(fieldMapId: string): Promise<FieldMap>;
+  listFieldMaps(): Promise<FieldMap[]>;
+  rerunFieldMap(fieldMapId: string): Promise<FieldMap>;
   exportObsidian(paperId: string): Promise<{ note_path: string }>;
   rerunAgent(paperId: string): Promise<PaperSession>;
   getAgentStatus(): Promise<AgentStatus>;
@@ -112,6 +117,24 @@ export function createPaperflowClient(baseUrl = "http://127.0.0.1:8000"): Paperf
     },
     async getRelated(paperId: string) {
       return request<R1SearchResult>(`${baseUrl}/api/papers/${paperId}/related`);
+    },
+    async createFieldMap(paperId: string) {
+      return request<FieldMap>(`${baseUrl}/api/field-maps`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paper_id: paperId }),
+      });
+    },
+    async getFieldMap(fieldMapId: string) {
+      return request<FieldMap>(`${baseUrl}/api/field-maps/${fieldMapId}`);
+    },
+    async listFieldMaps() {
+      return request<FieldMap[]>(`${baseUrl}/api/field-maps`);
+    },
+    async rerunFieldMap(fieldMapId: string) {
+      return request<FieldMap>(`${baseUrl}/api/field-maps/${fieldMapId}/rerun`, {
+        method: "POST",
+      });
     },
     async exportObsidian(paperId: string) {
       return request<{ note_path: string }>(`${baseUrl}/api/papers/${paperId}/export-obsidian`, {

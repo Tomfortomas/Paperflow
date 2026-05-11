@@ -148,3 +148,81 @@ export interface AgentStatus {
   mode: string;
   model?: string | null;
 }
+
+// Phase 4 — Field Map.
+
+export type MilestoneCategory =
+  | "problem_definition"
+  | "method_paradigm"
+  | "dataset"
+  | "benchmark"
+  | "system"
+  | "theory"
+  | "survey"
+  | "unknown";
+
+export interface MilestonePaper {
+  id: string;
+  title: string;
+  authors: string[];
+  year?: number | null;
+  venue?: string | null;
+  url?: string | null;
+  doi?: string | null;
+  arxiv_id?: string | null;
+  semantic_scholar_id?: string | null;
+  citation_count?: number | null;
+  influential_citation_count?: number | null;
+  velocity?: number | null;
+  milestone_score: number;
+  why_milestone: string;
+  category: MilestoneCategory;
+  risk?: string | null;
+  evidence: Evidence[];
+  user_confirmed?: boolean | null;
+}
+
+export type TimelineEventType =
+  | "milestone"
+  | "follow_up"
+  | "benchmark"
+  | "survey"
+  | "dataset"
+  | "system"
+  | "other";
+
+export interface TimelineEvent {
+  id: string;
+  year?: number | null;
+  paper_id?: string | null;
+  title: string;
+  authors: string[];
+  venue?: string | null;
+  event_type: TimelineEventType;
+  problem?: string | null;
+  key_idea?: string | null;
+  pipeline?: string | null;
+  evaluation?: string | null;
+  influence?: string | null;
+  reliability: ReliabilityLevel;
+  evidence: Evidence[];
+}
+
+export interface FieldMap {
+  id: string;
+  seed_paper_id: string;
+  seed_title?: string | null;
+  field_summary?: string | null;
+  task_taxonomy: string[];
+  datasets_benchmarks: string[];
+  metrics: string[];
+  milestones: MilestonePaper[];
+  timeline: TimelineEvent[];
+  method_families: string[];
+  evaluation_protocols: string[];
+  open_problems: Claim[];
+  recent_trends: Claim[];
+  research_opportunities: Claim[];
+  evidence_index: Evidence[];
+  generated_at?: number | null;
+}

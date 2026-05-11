@@ -71,6 +71,39 @@ class PaperStorage:
         except ValueError:
             return None
 
+    # --------------------------------------------------------------- Field Map (Phase 4)
+
+    def field_map_dir(self) -> Path:
+        directory = self.root / "field_maps"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def field_map_path(self, field_map_id: str) -> Path:
+        return self.field_map_dir() / f"{field_map_id}.json"
+
+    def save_field_map(self, field_map_id: str, payload: dict) -> Path:
+        path = self.field_map_path(field_map_id)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return path
+
+    def load_field_map(self, field_map_id: str) -> Optional[dict]:
+        path = self.field_map_path(field_map_id)
+        if not path.is_file():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            return None
+
+    def list_field_maps(self) -> List[dict]:
+        items: List[dict] = []
+        for path in sorted(self.field_map_dir().glob("*.json")):
+            try:
+                items.append(json.loads(path.read_text(encoding="utf-8")))
+            except ValueError:
+                continue
+        return items
+
     # --------------------------------------------------------------- create
 
     def create_paper_session(

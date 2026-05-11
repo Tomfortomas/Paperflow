@@ -124,3 +124,100 @@ class PaperSession(BaseModel):
     paper: Paper
     status: TaskStatus
     report: Optional[ReadingReport] = None
+
+
+# ----------------------------------------------------------------------- Phase 4: Field Map
+
+
+class MilestoneCategory(str, Enum):
+    """The kind of contribution that earns a paper its milestone status."""
+
+    PROBLEM_DEFINITION = "problem_definition"
+    METHOD_PARADIGM = "method_paradigm"
+    DATASET = "dataset"
+    BENCHMARK = "benchmark"
+    SYSTEM = "system"
+    THEORY = "theory"
+    SURVEY = "survey"
+    UNKNOWN = "unknown"
+
+
+class MilestonePaper(BaseModel):
+    """One milestone paper produced by the milestone detector.
+
+    The fields mirror PRD §4.6 — score, category, evidence and risk are all
+    first-class so the UI can show ``why milestone`` next to it.
+    """
+
+    id: str
+    title: str
+    authors: List[str] = Field(default_factory=list)
+    year: Optional[int] = None
+    venue: Optional[str] = None
+    url: Optional[str] = None
+    doi: Optional[str] = None
+    arxiv_id: Optional[str] = None
+    semantic_scholar_id: Optional[str] = None
+    citation_count: Optional[int] = None
+    influential_citation_count: Optional[int] = None
+    velocity: Optional[float] = None  # citations / years_since_publication
+    milestone_score: float = 0.0
+    why_milestone: str = ""
+    category: MilestoneCategory = MilestoneCategory.UNKNOWN
+    risk: Optional[str] = None
+    evidence: List[Evidence] = Field(default_factory=list)
+    user_confirmed: Optional[bool] = None  # True/False after human review
+
+
+class TimelineEventType(str, Enum):
+    MILESTONE = "milestone"
+    FOLLOW_UP = "follow_up"
+    BENCHMARK = "benchmark"
+    SURVEY = "survey"
+    DATASET = "dataset"
+    SYSTEM = "system"
+    OTHER = "other"
+
+
+class TimelineEvent(BaseModel):
+    """One ordered entry on the technology timeline (PRD §4.7)."""
+
+    id: str
+    year: Optional[int] = None
+    paper_id: Optional[str] = None  # local paper.id if this is in the library
+    title: str
+    authors: List[str] = Field(default_factory=list)
+    venue: Optional[str] = None
+    event_type: TimelineEventType = TimelineEventType.OTHER
+    problem: Optional[str] = None
+    key_idea: Optional[str] = None
+    pipeline: Optional[str] = None
+    evaluation: Optional[str] = None
+    influence: Optional[str] = None
+    reliability: ReliabilityLevel = ReliabilityLevel.R1
+    evidence: List[Evidence] = Field(default_factory=list)
+
+
+class FieldMap(BaseModel):
+    """Aggregated domain-level artifact (PRD §4.8).
+
+    Fields mirror the PRD: factual sections are R1, trend / opportunity
+    sections are R2 and the UI hides R2 by default.
+    """
+
+    id: str
+    seed_paper_id: str
+    seed_title: Optional[str] = None
+    field_summary: Optional[str] = None
+    task_taxonomy: List[str] = Field(default_factory=list)
+    datasets_benchmarks: List[str] = Field(default_factory=list)
+    metrics: List[str] = Field(default_factory=list)
+    milestones: List[MilestonePaper] = Field(default_factory=list)
+    timeline: List[TimelineEvent] = Field(default_factory=list)
+    method_families: List[str] = Field(default_factory=list)
+    evaluation_protocols: List[str] = Field(default_factory=list)
+    open_problems: List[Claim] = Field(default_factory=list)
+    recent_trends: List[Claim] = Field(default_factory=list)
+    research_opportunities: List[Claim] = Field(default_factory=list)
+    evidence_index: List[Evidence] = Field(default_factory=list)
+    generated_at: Optional[float] = None

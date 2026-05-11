@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from app.deepseek import DeepSeekClient
 from app.evidence_verifier import EvidenceVerifier
+from app.field_map import build_field_map
 from app.metadata import (
     MetadataError,
     classify_url,
@@ -24,6 +25,7 @@ from app.models import (
     Claim,
     Evidence,
     EvidenceLocationStatus,
+    FieldMap,
     ImportSourceType,
     PaperMetadata,
     PaperSession,
@@ -498,6 +500,98 @@ def create_app(
         markdown = render_obsidian_note(paper, report)
         note_path = storage.save_note(paper_id, markdown)
         return ExportResponse(note_path=str(note_path))
+
+    # ----------------------------------------------------------- Phase 4: Field Map
+
+    def _build_field_map_for_paper(paper_id: str, *, run_r1_if_missing: bool = True) -> FieldMap:
+        try:
+            paper = storage.get_paper(paper_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Paper not found") from exc
+
+        metadata = paper.metadata or PaperMetadata(title=paper.title)
+
+        # Pull cached R1 result, regenerating it lazily if absent.
+        r1_payload = storage.load_r1(paper_id)
+        if r1_payload is None and run_r1_if_missing:
+            chunks_file = storage.chunks_path(paper_id)
+            parsed = load_chunks(chunks_file)
+            if parsed is None and paper.pdf_path.is_file():
+                try:
+                    parsed = parse_pdf(paper.pdf_path)
+                    if parsed.chunks:
+                        save_chunks(chunks_file, parsed)
+                except Exception:
+                    parsed = None
+            parsed_refs = extract_references_from_parsed(parsed) if parsed is not None else []
+            pipeline = pipeline_factory()
+            try:
+                result = pipeline.search(metadata, parsed_refs=parsed_refs)
+            finally:
+                for member in ("s2", "oa", "pwc"):
+                    client = getattr(pipeline, member, None)
+                    close = getattr(client, "close", None)
+                    if callable(close) and r1_pipeline is None:
+                        close()
+            r1_payload = result.to_dict()
+            storage.save_r1(paper_id, r1_payload)
+            search_result = result
+        else:
+            from app.models import RelatedWorkItem as _RWI
+            from app.r1_search import R1QueryTraceEntry, R1SearchResult as _R1Result
+
+            search_result = _R1Result(
+                items=[_RWI.model_validate(item) for item in (r1_payload or {}).get("items", [])],
+                query_trace=[
+                    R1QueryTraceEntry(**entry) for entry in (r1_payload or {}).get("query_trace", [])
+                ],
+            )
+
+        try:
+            report = reports.get(paper_id) or storage.load_report(paper_id)
+        except FileNotFoundError:
+            report = None
+
+        return build_field_map(
+            seed_paper_id=paper_id,
+            seed_metadata=metadata,
+            search_result=search_result,
+            report=report,
+        )
+
+    @app.post("/api/field-maps")
+    def create_field_map(payload: Dict[str, str]):
+        paper_id = payload.get("paper_id")
+        if not paper_id:
+            raise HTTPException(status_code=400, detail="paper_id is required")
+        field_map = _build_field_map_for_paper(paper_id)
+        storage.save_field_map(field_map.id, field_map.model_dump(mode="json"))
+        return field_map
+
+    @app.get("/api/field-maps/{field_map_id}")
+    def get_field_map(field_map_id: str):
+        cached = storage.load_field_map(field_map_id)
+        if cached is None:
+            raise HTTPException(status_code=404, detail="Field map not found")
+        return cached
+
+    @app.post("/api/field-maps/{field_map_id}/rerun")
+    def rerun_field_map(field_map_id: str):
+        cached = storage.load_field_map(field_map_id)
+        if cached is None:
+            raise HTTPException(status_code=404, detail="Field map not found")
+        paper_id = cached.get("seed_paper_id")
+        if not paper_id:
+            raise HTTPException(status_code=400, detail="Field map is missing seed_paper_id")
+        field_map = _build_field_map_for_paper(paper_id)
+        # Reuse the original id so existing references / Obsidian links stay stable.
+        field_map.id = field_map_id
+        storage.save_field_map(field_map.id, field_map.model_dump(mode="json"))
+        return field_map
+
+    @app.get("/api/field-maps")
+    def list_field_maps():
+        return storage.list_field_maps()
 
     return app
 
