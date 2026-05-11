@@ -68,6 +68,32 @@ def stage_badge(stage: str) -> Text:
     return Text(stage, style=style)
 
 
+def _render_r1_label(item: Dict[str, Any]) -> str:
+    """Build a compact one-line label for an R1 RelatedWorkItem."""
+
+    title = item.get("title") or "(untitled)"
+    bits: List[str] = [title]
+    meta_bits: List[str] = []
+    authors = item.get("authors") or []
+    if isinstance(authors, list) and authors:
+        meta_bits.append(authors[0] + (" et al." if len(authors) > 1 else ""))
+    year = item.get("year")
+    if year:
+        meta_bits.append(str(year))
+    venue = item.get("venue")
+    if venue:
+        meta_bits.append(str(venue))
+    cites = item.get("citation_count")
+    if cites:
+        meta_bits.append(f"{cites} cites")
+    if meta_bits:
+        bits.append(f"  ·  {' / '.join(meta_bits)}")
+    relation = item.get("relation")
+    if relation:
+        bits.append(f"  ({relation})")
+    return "".join(bits)
+
+
 _LOCATION_LABEL = {
     "exact": "located precisely",
     "page_and_quote": "located by page + paragraph",
@@ -446,6 +472,7 @@ class WorkspaceScreen(Screen):
         Binding("b,escape", "back", "Back", show=True),
         Binding("a", "ask", "Ask", show=True),
         Binding("c", "copy_quote", "Copy quote", show=True),
+        Binding("1", "run_r1_search", "R1 search", show=True),
         Binding("s", "save_obsidian", "Save Obsidian", show=True),
         Binding("r", "rerun", "Rerun Agent", show=True),
         Binding("R", "refresh", "Refresh", show=True),
@@ -563,14 +590,14 @@ class WorkspaceScreen(Screen):
         # R1 related work.
         related = report.get("related_work") or []
         if related:
-            rw_node = tree.root.add("R1 Related Work", expand=False)
+            rw_node = tree.root.add(f"R1 Related Work ({len(related)})", expand=False)
             for item in related:
                 claim_like = {
                     "id": item.get("id"),
-                    "text": f"{item.get('title')}  ·  {item.get('relation')}  (source: {item.get('source')})",
+                    "text": _render_r1_label(item),
                     "reliability": item.get("reliability", "R1"),
                     "evidence": item.get("evidence") or [],
-                    "uncertainty": None,
+                    "uncertainty": item.get("comparison_risk"),
                 }
                 node = rw_node.add_leaf(self._claim_label(claim_like))
                 self._claim_index[node.id] = ("R1 Related Work", claim_like)
@@ -669,6 +696,30 @@ class WorkspaceScreen(Screen):
 
     async def action_refresh(self) -> None:
         await self.load_report()
+
+    async def action_run_r1_search(self) -> None:
+        """Phase 3: run the backend's R1 pipeline and refresh the report tree."""
+
+        if (self.paper.get("status") or {}).get("stage") != "completed":
+            self._set_status(Text("Wait for the report to finish before running R1.", style="yellow"))
+            return
+        self._set_status(Text("Running R1 search (references + citations + benchmark…) …", style="yellow"))
+        try:
+            payload = await self.app.client.run_r1_search(str(self.paper["id"]))
+        except PaperflowAPIError as exc:
+            self._set_status(Text(f"R1 search failed: {exc}", style="bold red"))
+            return
+        items = payload.get("items") or []
+        if self.report is not None:
+            self.report["related_work"] = items
+            self._populate_tree(self.report)
+        trace = payload.get("query_trace") or []
+        self._set_status(
+            Text(
+                f"R1 search done · {len(items)} candidates across {len(trace)} traced lanes.",
+                style="green",
+            )
+        )
 
     def action_copy_quote(self) -> None:
         """Copy the selected claim's first evidence quote to the OS clipboard."""

@@ -62,7 +62,7 @@ V2 progress (in active rollout):
 
 - [x] **Phase 2 — Metadata & Import**: real `authors / year / venue / DOI / arXiv ID` populated via arXiv, CrossRef, Semantic Scholar, OpenReview APIs; new `POST /api/papers/import-url` auto-detects source; read-only Zotero importer (`POST /api/papers/import-zotero`); content-hash + DOI + arXiv-ID dedup; metadata chips on Library cards (web + TUI)
 - [x] **Phase 1 — Evidence Workflow**: PyMuPDF block-level parser with section guesses; `EvidenceVerifier` fuzzy-matches every agent quote to page + bbox + `location_status`; PDF.js viewer with page jump, bbox highlight, and select-to-ask; TUI evidence panel surfaces bbox + status; new endpoints `GET /api/papers/{id}/pdf`, `GET /api/papers/{id}/chunks`, `POST /api/papers/{id}/ask-selection`
-- [ ] **Phase 3 — Real R1 Search**: Semantic Scholar references/citations, OpenAlex fallback, Papers with Code, query trace + comparison risk
+- [x] **Phase 3 — Real R1 Search**: six-lane pipeline (seed → backward → forward → benchmark → survey → recent) over Semantic Scholar Graph API, OpenAlex (fallback), and Papers with Code, plus a regex-based local references parser; each candidate carries author / year / venue / DOI / arXiv / citation counts and a `comparison_risk` note; new endpoints `POST /api/papers/{id}/r1-search` and `GET /api/papers/{id}/related`; web and TUI show a richer Related Work panel with the per-lane query trace.
 - [ ] **Phase 4 — Field Map**: milestone detection, technology timeline, task / dataset / method / open problems aggregator
 - [ ] **Phase 5 — Compare + R2 + Cancel/Retry/Resume**: multi-paper compare, Research Insight Agent (R2), task queue lifecycle
 
@@ -200,6 +200,8 @@ Keyboard bindings:
 | Workspace | `j` / `k` / `↑` / `↓` | Navigate claims in the Reading Report tree |
 | Workspace | `Enter` | Inspect a claim's evidence on the right panel |
 | Workspace | `a` | Ask a focused question — answer is graded R0 / R1 / R2 |
+| Workspace | `c` | Copy the selected claim's quote to the clipboard |
+| Workspace | `1` | Run the six-lane R1 related-work search |
 | Workspace | `s` | Save / update the Obsidian note |
 | Workspace | `r` | Re-run agent for this paper |
 | Workspace | `b` / `Esc` | Back to Library |

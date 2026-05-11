@@ -33,6 +33,8 @@ from app.models import (
 )
 from app.obsidian import render_obsidian_note
 from app.pdf_parser import load_chunks, parse_pdf, save_chunks
+from app.r1_search import R1SearchPipeline
+from app.refs_parser import extract_references_from_parsed
 from app.report_service import ReportService
 from app.storage import PaperStorage
 from app.zotero import ZoteroError, ZoteroReader
@@ -69,6 +71,7 @@ class ExportResponse(BaseModel):
 def create_app(
     storage_root: Path = Path("paperflow_data"),
     report_service: Optional[ReportService] = None,
+    r1_pipeline: Optional[R1SearchPipeline] = None,
 ) -> FastAPI:
     app = FastAPI(title="Paperflow API")
     app.add_middleware(
@@ -82,6 +85,7 @@ def create_app(
     storage = PaperStorage(storage_root)
     injected_report_service = report_service is not None
     report_service = report_service or ReportService()
+    pipeline_factory = (lambda: r1_pipeline) if r1_pipeline is not None else R1SearchPipeline
     reports: Dict[str, ReadingReport] = {}
 
     def create_session_from_pdf(
@@ -420,6 +424,66 @@ def create_app(
             evidence=[evidence],
             uncertainty=None,
         )
+
+    @app.post("/api/papers/{paper_id}/r1-search")
+    def r1_search(paper_id: str):
+        """Run the 6-lane R1 pipeline for ``paper_id`` and persist the result.
+
+        The new R1 items overwrite the report's ``related_work`` so the
+        Workspace immediately sees real candidates instead of the V1
+        placeholder.
+        """
+
+        try:
+            paper = storage.get_paper(paper_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Paper not found")
+
+        metadata = paper.metadata or PaperMetadata(title=paper.title)
+        # Reuse parsed PDF chunks for the backward lane fallback.
+        chunks_file = storage.chunks_path(paper_id)
+        parsed = load_chunks(chunks_file)
+        if parsed is None and paper.pdf_path.is_file():
+            try:
+                parsed = parse_pdf(paper.pdf_path)
+                if parsed.chunks:
+                    save_chunks(chunks_file, parsed)
+            except Exception:
+                parsed = None
+        parsed_refs = extract_references_from_parsed(parsed) if parsed is not None else []
+
+        pipeline = pipeline_factory()
+        try:
+            result = pipeline.search(metadata, parsed_refs=parsed_refs)
+        finally:
+            for member in ("s2", "oa", "pwc"):
+                client = getattr(pipeline, member, None)
+                close = getattr(client, "close", None)
+                if callable(close) and r1_pipeline is None:
+                    close()
+
+        payload = result.to_dict()
+        storage.save_r1(paper_id, payload)
+
+        # Patch the report in-memory and on disk.
+        try:
+            report = reports.get(paper_id) or storage.load_report(paper_id)
+        except FileNotFoundError:
+            report = None
+        if report is not None:
+            report.related_work = list(result.items)
+            reports[paper_id] = report
+            storage.save_report(report)
+        return payload
+
+    @app.get("/api/papers/{paper_id}/related")
+    def get_related(paper_id: str):
+        """Return the most recent R1 search payload (items + query trace)."""
+
+        cached = storage.load_r1(paper_id)
+        if cached is None:
+            raise HTTPException(status_code=404, detail="No R1 result yet; run /r1-search first")
+        return cached
 
     @app.post("/api/papers/{paper_id}/export-obsidian")
     def export_obsidian(paper_id: str):

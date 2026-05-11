@@ -4,6 +4,7 @@ import type {
   Paper,
   ParsedPdfPayload,
   PaperSession,
+  R1SearchResult,
   ReadingReport,
   TaskStatus,
   ZoteroImportResult,
@@ -30,6 +31,8 @@ export interface PaperflowClient {
   askSelection(paperId: string, payload: AskSelectionPayload): Promise<Claim>;
   getChunks(paperId: string): Promise<ParsedPdfPayload>;
   pdfUrl(paperId: string): string;
+  runR1Search(paperId: string): Promise<R1SearchResult>;
+  getRelated(paperId: string): Promise<R1SearchResult>;
   exportObsidian(paperId: string): Promise<{ note_path: string }>;
   rerunAgent(paperId: string): Promise<PaperSession>;
   getAgentStatus(): Promise<AgentStatus>;
@@ -101,6 +104,14 @@ export function createPaperflowClient(baseUrl = "http://127.0.0.1:8000"): Paperf
     },
     pdfUrl(paperId: string) {
       return `${baseUrl}/api/papers/${paperId}/pdf`;
+    },
+    async runR1Search(paperId: string) {
+      return request<R1SearchResult>(`${baseUrl}/api/papers/${paperId}/r1-search`, {
+        method: "POST",
+      });
+    },
+    async getRelated(paperId: string) {
+      return request<R1SearchResult>(`${baseUrl}/api/papers/${paperId}/related`);
     },
     async exportObsidian(paperId: string) {
       return request<{ note_path: string }>(`${baseUrl}/api/papers/${paperId}/export-obsidian`, {

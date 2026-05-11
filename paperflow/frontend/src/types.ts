@@ -37,6 +37,29 @@ export interface RelatedWorkItem {
   source: string;
   reliability: ReliabilityLevel;
   evidence: Evidence[];
+  authors?: string[];
+  year?: number | null;
+  venue?: string | null;
+  url?: string | null;
+  doi?: string | null;
+  arxiv_id?: string | null;
+  semantic_scholar_id?: string | null;
+  citation_count?: number | null;
+  influential_citation_count?: number | null;
+  comparison_risk?: string | null;
+}
+
+export interface R1QueryTraceEntry {
+  lane: string;
+  source: string;
+  query: string;
+  count: number;
+}
+
+export interface R1SearchResult {
+  items: RelatedWorkItem[];
+  query_trace: R1QueryTraceEntry[];
+  seed_resolved_at?: number | null;
 }
 
 export interface ReadingReport {

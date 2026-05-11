@@ -109,6 +109,14 @@ class PaperflowClient:
             timeout=120.0,
         )
 
+    async def run_r1_search(self, paper_id: str) -> Dict[str, Any]:
+        """Trigger the 6-lane R1 search pipeline for ``paper_id``."""
+
+        return await self._post(f"/api/papers/{paper_id}/r1-search", timeout=120.0)
+
+    async def get_related(self, paper_id: str) -> Dict[str, Any]:
+        return await self._get(f"/api/papers/{paper_id}/related")
+
     async def import_zotero(self, item_key: Optional[str] = None) -> Dict[str, Any]:
         """Import everything (or one item) from the local Zotero library."""
 

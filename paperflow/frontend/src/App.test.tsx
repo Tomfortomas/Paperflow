@@ -199,6 +199,8 @@ function fakeClient(overrides: Partial<PaperflowClient> = {}): PaperflowClient {
     askSelection: vi.fn(),
     getChunks: vi.fn().mockResolvedValue({ chunks: [], page_sizes: [] }),
     pdfUrl: vi.fn().mockReturnValue("http://127.0.0.1:8000/api/papers/paper-1/pdf"),
+    runR1Search: vi.fn().mockResolvedValue({ items: [], query_trace: [] }),
+    getRelated: vi.fn().mockResolvedValue({ items: [], query_trace: [] }),
     exportObsidian: vi.fn(),
     rerunAgent: vi.fn(),
     getAgentStatus: vi.fn().mockResolvedValue({ configured: true, mode: "injected", model: null }),

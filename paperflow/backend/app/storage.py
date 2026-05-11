@@ -52,6 +52,25 @@ class PaperStorage:
     def chunks_path(self, paper_id: str) -> Path:
         return self.chunk_dir / f"{paper_id}.json"
 
+    def r1_path(self, paper_id: str) -> Path:
+        directory = self.root / "r1"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / f"{paper_id}.json"
+
+    def save_r1(self, paper_id: str, payload: dict) -> Path:
+        path = self.r1_path(paper_id)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return path
+
+    def load_r1(self, paper_id: str) -> Optional[dict]:
+        path = self.r1_path(paper_id)
+        if not path.is_file():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            return None
+
     # --------------------------------------------------------------- create
 
     def create_paper_session(

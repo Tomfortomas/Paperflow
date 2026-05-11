@@ -7,7 +7,9 @@ import type {
   Claim,
   Evidence,
   Paper,
+  R1QueryTraceEntry,
   ReadingReport,
+  RelatedWorkItem,
   TaskStatus,
 } from "./types";
 import "./styles.css";
@@ -80,6 +82,14 @@ const UI_TEXT = {
     locationPageQuote: "已定位到页 + 段落",
     locationQuoteOnly: "无法在 PDF 中定位",
     locationMissing: "缺少证据原文",
+    r1RunSearch: "运行 R1 检索",
+    r1Running: "正在跑 R1 搜索…",
+    r1Updated: (count: number) => `R1 检索完成，共 ${count} 篇相关论文。`,
+    r1Failed: "R1 检索失败：",
+    r1QueryTrace: "R1 检索踪迹",
+    r1ComparisonRisk: "对比风险：",
+    r1CitedBy: (count: number) => `引用 ${count}`,
+    r1InfluentialCitedBy: (count: number) => `高影响力引用 ${count}`,
     statusLabels: {
       queued: "排队中",
       processing: "解析中",
@@ -173,6 +183,14 @@ const UI_TEXT = {
     locationPageQuote: "Located by page + paragraph",
     locationQuoteOnly: "Could not locate in PDF",
     locationMissing: "Missing evidence quote",
+    r1RunSearch: "Run R1 search",
+    r1Running: "Running R1 search…",
+    r1Updated: (count: number) => `R1 search returned ${count} related papers.`,
+    r1Failed: "R1 search failed: ",
+    r1QueryTrace: "R1 query trace",
+    r1ComparisonRisk: "Comparison risk: ",
+    r1CitedBy: (count: number) => `${count} cites`,
+    r1InfluentialCitedBy: (count: number) => `${count} high-impact cites`,
     statusLabels: {
       queued: "queued",
       processing: "processing",
@@ -545,6 +563,10 @@ function Workspace({
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(report?.summary[0] ?? null);
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [pdfPage, setPdfPage] = useState(1);
+  const [r1Running, setR1Running] = useState(false);
+  const [r1Error, setR1Error] = useState<string | null>(null);
+  const [r1Trace, setR1Trace] = useState<R1QueryTraceEntry[]>([]);
+  const [relatedOverride, setRelatedOverride] = useState<RelatedWorkItem[] | null>(null);
 
   const isReportReady = paper.status?.stage === "completed";
   const pdfUrl = useMemo(() => client.pdfUrl(paper.id), [client, paper.id]);
@@ -591,6 +613,20 @@ function Workspace({
     const result = await client.exportObsidian(paper.id);
     setNotePath(result.note_path);
     onNoteSaved(result.note_path);
+  }
+
+  async function runR1Search() {
+    setR1Running(true);
+    setR1Error(null);
+    try {
+      const result = await client.runR1Search(paper.id);
+      setRelatedOverride(result.items);
+      setR1Trace(result.query_trace || []);
+    } catch (caught) {
+      setR1Error(caught instanceof Error ? caught.message : "R1 search failed");
+    } finally {
+      setR1Running(false);
+    }
   }
 
   if (!report) {
@@ -684,17 +720,42 @@ function Workspace({
         ))}
 
         <section className="report-section">
-          <h3>{text.relatedWork}</h3>
-          {report.related_work.map((item) => (
-            <article className="claim-card" key={item.id}>
+          <div className="r1-header">
+            <h3>{text.relatedWork}</h3>
+            <button type="button" onClick={() => void runR1Search()} disabled={r1Running}>
+              {r1Running ? text.r1Running : text.r1RunSearch}
+            </button>
+          </div>
+          {r1Error ? <p className="warning">{text.r1Failed}{r1Error}</p> : null}
+          {(relatedOverride ?? report.related_work).map((item) => (
+            <article className="claim-card r1-card" key={item.id}>
               <span className={`badge ${item.reliability.toLowerCase()}`}>
                 {item.reliability}
               </span>
               <strong>{item.title}</strong>
+              <RelatedWorkChips item={item} locale={locale} />
               <p>{item.relation}</p>
+              {item.evidence?.[0]?.quote ? (
+                <blockquote className="r1-tldr">{item.evidence[0].quote}</blockquote>
+              ) : null}
               <p className="muted">{item.source}</p>
+              {item.comparison_risk ? (
+                <p className="warning small">{text.r1ComparisonRisk}{item.comparison_risk}</p>
+              ) : null}
             </article>
           ))}
+          {r1Trace.length > 0 ? (
+            <details className="r1-trace">
+              <summary>{text.r1QueryTrace}</summary>
+              <ul>
+                {r1Trace.map((entry, idx) => (
+                  <li key={`${entry.lane}-${idx}`}>
+                    <code>[{entry.lane}/{entry.source}]</code> {entry.query} → {entry.count}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </section>
       </section>
 
@@ -830,6 +891,49 @@ function StatusBadge({ status, locale }: { status?: TaskStatus; locale: Locale }
   const stage = status?.stage ?? "unknown";
   const text = UI_TEXT[locale];
   return <span className={`status-badge ${stage}`}>{text.statusLabels[stage as keyof typeof text.statusLabels] ?? stage}</span>;
+}
+
+function RelatedWorkChips({ item, locale }: { item: RelatedWorkItem; locale: Locale }) {
+  const text = UI_TEXT[locale];
+  const chips: { key: string; label: string }[] = [];
+  const authors = item.authors ?? [];
+  if (authors.length > 0) {
+    const head = authors.slice(0, 3).join(", ");
+    chips.push({ key: "authors", label: authors.length > 3 ? `${head}, …` : head });
+  }
+  if (item.year) {
+    chips.push({ key: "year", label: String(item.year) });
+  }
+  if (item.venue) {
+    chips.push({ key: "venue", label: item.venue });
+  }
+  if (item.citation_count != null) {
+    chips.push({ key: "cites", label: text.r1CitedBy(item.citation_count) });
+  }
+  if (item.influential_citation_count != null) {
+    chips.push({
+      key: "influence",
+      label: text.r1InfluentialCitedBy(item.influential_citation_count),
+    });
+  }
+  if (item.arxiv_id) {
+    chips.push({ key: "arxiv", label: `arXiv:${item.arxiv_id}` });
+  }
+  if (item.doi) {
+    chips.push({ key: "doi", label: `DOI:${item.doi}` });
+  }
+  if (chips.length === 0) {
+    return null;
+  }
+  return (
+    <p className="meta-chips">
+      {chips.map((chip) => (
+        <span key={chip.key} className={`meta-chip meta-chip-${chip.key}`}>
+          {chip.label}
+        </span>
+      ))}
+    </p>
+  );
 }
 
 function LocationStatusBadge({ evidence, locale }: { evidence: Evidence; locale: Locale }) {
