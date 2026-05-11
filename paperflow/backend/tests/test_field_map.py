@@ -203,6 +203,9 @@ def test_build_field_map_aggregates_topics_milestones_open_problems() -> None:
     assert fm.open_problems and "static" in fm.open_problems[0].text.lower()
     assert fm.timeline and fm.timeline[0].year <= fm.timeline[-1].year
     assert fm.recent_trends, "recent trends should pick up 2025 candidate"
+    assert fm.relationship_graph.nodes
+    assert any(node.role == "seed" and node.title == "Diffusion Models for Generation" for node in fm.relationship_graph.nodes)
+    assert any(edge.relation == "precedes" for edge in fm.relationship_graph.edges)
 
 
 # ------------------------------------------------------------ API

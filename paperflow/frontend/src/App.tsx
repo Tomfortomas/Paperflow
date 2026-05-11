@@ -7,8 +7,10 @@ import type {
   Claim,
   Evidence,
   FieldMap,
+  FieldMapRelationshipGraph,
   MilestonePaper,
   Paper,
+  PaperSession,
   R1QueryTraceEntry,
   ReadingReport,
   RelatedWorkItem,
@@ -28,33 +30,49 @@ const UI_TEXT = {
     importFailed: "导入失败。",
     reportUnavailable: "这篇论文的报告还不可用。",
     parseTimeout: "Agent 解析超时。你可以在论文工作台里重试。",
-    eyebrow: "本地优先的研究工作台",
-    libraryTitle: "Paperflow 文献库",
-    heroDescription: "导入论文，生成带证据的阅读报告，并保存为 Obsidian 原生笔记，方便长期研究沉淀。",
+    eyebrow: "本地优先的论文研读台",
+    libraryTitle: "Paperflow",
+    heroDescription:
+      "导入论文，生成带证据的阅读报告，并保存为 Obsidian 原生笔记。",
     agentLabel: "Agent",
     configured: "已配置",
     missingKey: "缺少 key",
     languageToggle: "English",
     importPdf: "导入 PDF",
+    importPdfHint: "本地 PDF 文件",
     arxivImportTitle: "从 arXiv 导入",
-    arxivPlaceholder: "粘贴 arXiv 链接或 ID，例如 2605.08063v1",
+    arxivPlaceholder: "arXiv ID 或链接",
     importArxiv: "下载并解析",
     arxivQueuedStatus: "arXiv PDF 已开始下载并加入解析队列。",
     emptyArxiv: "请输入 arXiv 链接或 ID。",
     urlImportTitle: "从 URL 导入",
-    urlPlaceholder: "arXiv / DOI / Semantic Scholar / OpenReview URL 都可识别",
+    urlPlaceholder: "DOI / Semantic Scholar / OpenReview",
     importUrl: "解析元数据并下载",
-    urlQueuedStatus: "已识别 URL 元数据，开始下载 PDF。",
+    urlQueuedStatus: "已识别 URL 元数据,开始下载 PDF。",
     emptyUrl: "请输入论文 URL 或 DOI。",
     zoteroImportTitle: "从 Zotero 导入",
+    zoteroPath: "~/Zotero/zotero.sqlite",
     zoteroImportButton: "导入本地 Zotero 库",
     zoteroImported: (count: number) => `已从 Zotero 导入 ${count} 篇论文。`,
     zoteroEmpty: "Zotero 库为空或没有可解析的 PDF 附件。",
+    importsLabel: "导入论文",
+    librarySection: "文献库",
     recentPapers: "最近论文",
-    notePrefix: "笔记：",
+    paperCount: (n: number) => `${n} 篇`,
+    notePrefix: "笔记",
     openPaper: (title: string) => `打开 ${title}`,
+    openPaperAction: "打开",
+    deletePaper: (title: string) => `删除 ${title}`,
+    deletePaperAction: "删除",
+    confirmDeletePaper: (title: string) => `确认删除 ${title}`,
+    confirmDeletePaperAction: "确认删除",
+    deleteFailed: "删除失败。",
     processingStatus: "处理状态",
     savedReports: "已保存报告",
+    navImport: "导入",
+    navPapers: "论文",
+    navReport: "报告",
+    navFieldMap: "Field Map",
     noNote: "尚未保存 Obsidian 笔记",
     backToLibrary: "返回文献库",
     reportNotReady: "Agent 报告还没生成。",
@@ -70,34 +88,34 @@ const UI_TEXT = {
     missingEvidence: "缺少证据。",
     selectClaim: "选择一个 claim 查看证据。",
     focusedQa: "聚焦追问",
-    askPlaceholder: "例如：只看 benchmark 和 dataset",
+    askPlaceholder: "例如:只看 benchmark 和 dataset",
     ask: "提问",
     obsidian: "Obsidian",
     saveNote: "保存 / 更新 Obsidian 笔记",
     savedTo: (path: string) => `已保存到 ${path}`,
-    page: (page: number) => ` 第 ${page} 页`,
+    page: (page: number) => `p. ${page}`,
     pdfPanel: "PDF 阅读",
     selectionAsk: "针对选区追问",
-    selectionPlaceholder: "在 PDF 中选中文本，再点这里追问。",
+    selectionPlaceholder: "在 PDF 中选中文本,再点这里追问。",
     enableViewer: "打开 PDF 阅读器",
     disableViewer: "关闭 PDF 阅读器",
-    locationExact: "证据已精确定位",
+    locationExact: "已精确定位",
     locationPageQuote: "已定位到页 + 段落",
     locationQuoteOnly: "无法在 PDF 中定位",
     locationMissing: "缺少证据原文",
     r1RunSearch: "运行 R1 检索",
     r1Running: "正在跑 R1 搜索…",
-    r1Updated: (count: number) => `R1 检索完成，共 ${count} 篇相关论文。`,
-    r1Failed: "R1 检索失败：",
+    r1Updated: (count: number) => `R1 检索完成,共 ${count} 篇相关论文。`,
+    r1Failed: "R1 检索失败:",
     r1QueryTrace: "R1 检索踪迹",
-    r1ComparisonRisk: "对比风险：",
-    r1CitedBy: (count: number) => `引用 ${count}`,
-    r1InfluentialCitedBy: (count: number) => `高影响力引用 ${count}`,
-    fieldMapTitle: "领域地图 (Field Map)",
+    r1ComparisonRisk: "对比风险:",
+    r1CitedBy: (count: number) => `${count} 引用`,
+    r1InfluentialCitedBy: (count: number) => `${count} 高影响力引用`,
+    fieldMapTitle: "领域地图",
     fieldMapGenerate: "生成 Field Map",
     fieldMapRegenerate: "重跑 Field Map",
-    fieldMapRunning: "Field Map 正在生成…",
-    fieldMapFailed: "Field Map 生成失败：",
+    fieldMapRunning: "Field Map 生成中…",
+    fieldMapFailed: "Field Map 生成失败:",
     fieldMapSummary: "领域摘要",
     fieldMapTaskTaxonomy: "任务定义",
     fieldMapDatasets: "数据集 / Benchmark",
@@ -105,12 +123,17 @@ const UI_TEXT = {
     fieldMapMethodFamilies: "方法家族",
     fieldMapMilestones: "里程碑论文",
     fieldMapTimeline: "技术时间线",
+    fieldMapRelationshipGraph: "前后关系图",
+    fieldMapGraphPredecessor: "前置基础",
+    fieldMapGraphSeed: "Seed",
+    fieldMapGraphSuccessor: "后续影响",
     fieldMapOpenProblems: "未解决问题",
     fieldMapRecentTrends: "近期趋势 (R2)",
     fieldMapOpportunities: "研究机会 (R2)",
-    fieldMapEmpty: "尚未生成 Field Map。先运行 R1 检索以获取更高质量结果。",
-    fieldMapWhy: "判定理由：",
-    fieldMapRisk: "风险：",
+    fieldMapEmpty:
+      "尚未生成 Field Map。先运行 R1 检索可以让结果更可信。",
+    fieldMapWhy: "判定理由:",
+    fieldMapRisk: "风险:",
     statusLabels: {
       queued: "排队中",
       processing: "解析中",
@@ -119,14 +142,18 @@ const UI_TEXT = {
       unknown: "未知",
     },
     taskMessages: {
-      "Ready for automatic R0 + lightweight R1 processing.": "已准备好自动执行 R0 + 轻量 R1 处理。",
-      "Backend not connected. Start FastAPI to load your library.": "后端未连接。请先启动 FastAPI 再加载文献库。",
+      "Ready for automatic R0 + lightweight R1 processing.":
+        "已准备好自动执行 R0 + 轻量 R1 处理。",
+      "Backend not connected. Start FastAPI to load your library.":
+        "后端未连接。请先启动 FastAPI 再加载文献库。",
       "Queued PDF for Agent parsing...": "PDF 已加入 Agent 解析队列。",
-      "arXiv PDF download queued for parsing.": "arXiv PDF 已开始下载并加入解析队列。",
+      "arXiv PDF download queued for parsing.":
+        "arXiv PDF 已开始下载并加入解析队列。",
       "Import failed.": "导入失败。",
       "Reading report generated": "阅读报告已生成",
       "Queued for Agent parsing": "已加入 Agent 解析队列",
-      "DeepSeek PaperAgent is parsing the PDF": "DeepSeek PaperAgent 正在解析 PDF",
+      "DeepSeek PaperAgent is parsing the PDF":
+        "DeepSeek PaperAgent 正在解析 PDF",
       "Queued for Agent rerun": "已加入 Agent 重跑队列",
     },
     sectionTitles: {
@@ -146,41 +173,60 @@ const UI_TEXT = {
     queuedStatus: "Queued PDF for Agent parsing...",
     importFailed: "Import failed.",
     reportUnavailable: "Report is not available for this paper yet.",
-    parseTimeout: "Agent parsing timed out. You can retry from the paper workspace.",
+    parseTimeout:
+      "Agent parsing timed out. You can retry from the paper workspace.",
     eyebrow: "Local-first research workspace",
     libraryTitle: "Paperflow Library",
-    heroDescription: "Bring in papers, generate evidence-aware reading reports, and save Obsidian-native notes for long-term research.",
+    heroDescription:
+      "Bring in papers, generate evidence-aware reading reports, and save Obsidian-native notes for long-term research.",
     agentLabel: "Agent",
     configured: "configured",
     missingKey: "missing key",
     languageToggle: "中文",
     importPdf: "Import PDF",
+    importPdfHint: "Drop a PDF or browse to choose one",
     arxivImportTitle: "Import from arXiv",
     arxivPlaceholder: "Paste an arXiv URL or ID, e.g. 2605.08063v1",
     importArxiv: "Download and Parse",
     arxivQueuedStatus: "arXiv PDF download queued for parsing.",
     emptyArxiv: "Enter an arXiv URL or ID.",
     urlImportTitle: "Import from URL",
-    urlPlaceholder: "arXiv / DOI / Semantic Scholar / OpenReview URL — auto-detected",
+    urlPlaceholder:
+      "arXiv / DOI / Semantic Scholar / OpenReview URL, auto-detected",
     importUrl: "Fetch metadata and download",
     urlQueuedStatus: "Metadata fetched, downloading PDF.",
     emptyUrl: "Enter a paper URL or DOI.",
     zoteroImportTitle: "Import from Zotero",
+    zoteroPath: "~/Zotero/zotero.sqlite",
     zoteroImportButton: "Import local Zotero library",
     zoteroImported: (count: number) => `Imported ${count} papers from Zotero.`,
     zoteroEmpty: "Zotero library is empty or has no PDF attachments.",
+    importsLabel: "Import",
+    librarySection: "Library",
     recentPapers: "Recent Papers",
-    notePrefix: "Note:",
+    paperCount: (n: number) => `${n} item${n === 1 ? "" : "s"}`,
+    notePrefix: "Note",
     openPaper: (title: string) => `Open ${title}`,
+    openPaperAction: "Open",
+    deletePaper: (title: string) => `Delete ${title}`,
+    deletePaperAction: "Delete",
+    confirmDeletePaper: (title: string) => `Confirm delete ${title}`,
+    confirmDeletePaperAction: "Confirm delete",
+    deleteFailed: "Delete failed.",
     processingStatus: "Processing Status",
     savedReports: "Saved Reports",
+    navImport: "Import",
+    navPapers: "Papers",
+    navReport: "Report",
+    navFieldMap: "Field Map",
     noNote: "No Obsidian note yet",
     backToLibrary: "Back to Library",
     reportNotReady: "Agent report is not ready yet.",
     readingReport: "Reading Report",
     executiveSummary: "Executive Summary",
     relatedWork: "R1 Related Work",
-    evidenceButton: (count: number) => `View ${count} evidence item${count === 1 ? "" : "s"}`,
+    evidenceButton: (count: number) =>
+      `View ${count} evidence item${count === 1 ? "" : "s"}`,
     selectedClaim: "Selected claim",
     agentStatus: "Agent Status",
     noActiveTask: "No active task.",
@@ -194,16 +240,17 @@ const UI_TEXT = {
     obsidian: "Obsidian",
     saveNote: "Save / Update Obsidian Note",
     savedTo: (path: string) => `Saved to ${path}`,
-    page: (page: number) => ` p. ${page}`,
+    page: (page: number) => `p. ${page}`,
     pdfPanel: "PDF Viewer",
     selectionAsk: "Ask about selection",
-    selectionPlaceholder: "Select text in the PDF, then click to ask.",
+    selectionPlaceholder:
+      "Select text in the PDF, then click to ask.",
     enableViewer: "Open PDF viewer",
     disableViewer: "Close PDF viewer",
-    locationExact: "Located precisely in PDF",
-    locationPageQuote: "Located by page + paragraph",
-    locationQuoteOnly: "Could not locate in PDF",
-    locationMissing: "Missing evidence quote",
+    locationExact: "located precisely",
+    locationPageQuote: "page + paragraph",
+    locationQuoteOnly: "no PDF location",
+    locationMissing: "no evidence quote",
     r1RunSearch: "Run R1 search",
     r1Running: "Running R1 search…",
     r1Updated: (count: number) => `R1 search returned ${count} related papers.`,
@@ -224,10 +271,15 @@ const UI_TEXT = {
     fieldMapMethodFamilies: "Method Families",
     fieldMapMilestones: "Milestone Papers",
     fieldMapTimeline: "Technology Timeline",
+    fieldMapRelationshipGraph: "Lineage Graph",
+    fieldMapGraphPredecessor: "Predecessors",
+    fieldMapGraphSeed: "Seed",
+    fieldMapGraphSuccessor: "Successors",
     fieldMapOpenProblems: "Open Problems",
     fieldMapRecentTrends: "Recent Trends (R2)",
     fieldMapOpportunities: "Research Opportunities (R2)",
-    fieldMapEmpty: "No Field Map yet. Running R1 search first will give better results.",
+    fieldMapEmpty:
+      "No Field Map yet. Running R1 search first will give better results.",
     fieldMapWhy: "Why milestone: ",
     fieldMapRisk: "Risk: ",
     statusLabels: {
@@ -263,6 +315,8 @@ export function App({
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const [arxivInput, setArxivInput] = useState("");
   const [urlInput, setUrlInput] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
@@ -291,17 +345,27 @@ export function App({
     }
   }
 
+  function acceptImportedSession(session: PaperSession) {
+    setImportNotice(session.duplicate_warning ?? null);
+    setPapers((current) => [
+      session.paper,
+      ...current.filter(
+        (p) =>
+          p.id !== session.paper.id &&
+          p.id !== session.duplicate_of?.id &&
+          p.title !== session.paper.title,
+      ),
+    ]);
+    setSelectedPaper(session.paper);
+    void pollPaper(session.paper.id);
+  }
+
   async function handleImport(file: File) {
     setError(null);
     setStatus(UI_TEXT.en.queuedStatus);
     try {
       const session = await client.importPaper(file);
-      setPapers((current) => [
-        session.paper,
-        ...current.filter((paper) => paper.id !== session.paper.id && paper.title !== session.paper.title),
-      ]);
-      setSelectedPaper(session.paper);
-      void pollPaper(session.paper.id);
+      acceptImportedSession(session);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.importFailed);
       setStatus(UI_TEXT.en.importFailed);
@@ -318,13 +382,8 @@ export function App({
     setStatus(UI_TEXT.en.arxivQueuedStatus);
     try {
       const session = await client.importArxiv(value);
-      setPapers((current) => [
-        session.paper,
-        ...current.filter((paper) => paper.id !== session.paper.id && paper.title !== session.paper.title),
-      ]);
-      setSelectedPaper(session.paper);
+      acceptImportedSession(session);
       setArxivInput("");
-      void pollPaper(session.paper.id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.importFailed);
       setStatus(UI_TEXT.en.importFailed);
@@ -341,13 +400,8 @@ export function App({
     setStatus(UI_TEXT.en.urlQueuedStatus);
     try {
       const session = await client.importUrl(value);
-      setPapers((current) => [
-        session.paper,
-        ...current.filter((paper) => paper.id !== session.paper.id && paper.title !== session.paper.title),
-      ]);
-      setSelectedPaper(session.paper);
+      acceptImportedSession(session);
       setUrlInput("");
-      void pollPaper(session.paper.id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.importFailed);
       setStatus(UI_TEXT.en.importFailed);
@@ -392,6 +446,26 @@ export function App({
     }
   }
 
+  async function deletePaper(paper: Paper) {
+    if (pendingDeleteId !== paper.id) {
+      setPendingDeleteId(paper.id);
+      return;
+    }
+    setError(null);
+    try {
+      await client.deletePaper(paper.id);
+      setPendingDeleteId(null);
+      setPapers((current) => current.filter((candidate) => candidate.id !== paper.id));
+      setReports((current) => {
+        const next = { ...current };
+        delete next[paper.id];
+        return next;
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : text.deleteFailed);
+    }
+  }
+
   async function pollPaper(paperId: string) {
     for (let attempt = 0; attempt < 240; attempt += 1) {
       const nextStatus = await client.getStatus(paperId);
@@ -416,7 +490,9 @@ export function App({
 
   function updatePaperStatus(paperId: string, nextStatus: TaskStatus) {
     setPapers((current) =>
-      current.map((paper) => (paper.id === paperId ? { ...paper, status: nextStatus } : paper)),
+      current.map((paper) =>
+        paper.id === paperId ? { ...paper, status: nextStatus } : paper,
+      ),
     );
     setSelectedPaper((current) =>
       current?.id === paperId ? { ...current, status: nextStatus } : current,
@@ -436,7 +512,9 @@ export function App({
 
   function updatePaperNote(paperId: string, notePath: string) {
     setPapers((current) =>
-      current.map((paper) => (paper.id === paperId ? { ...paper, note_path: notePath } : paper)),
+      current.map((paper) =>
+        paper.id === paperId ? { ...paper, note_path: notePath } : paper,
+      ),
     );
     setSelectedPaper((current) =>
       current?.id === paperId ? { ...current, note_path: notePath } : current,
@@ -445,7 +523,9 @@ export function App({
 
   function updatePaperTitle(paperId: string, title: string) {
     setPapers((current) =>
-      current.map((paper) => (paper.id === paperId ? { ...paper, title } : paper)),
+      current.map((paper) =>
+        paper.id === paperId ? { ...paper, title } : paper,
+      ),
     );
     setSelectedPaper((current) =>
       current?.id === paperId ? { ...current, title } : current,
@@ -458,6 +538,9 @@ export function App({
         client={client}
         onBack={() => setSelectedPaper(null)}
         locale={locale}
+        agentStatus={agentStatus}
+        importNotice={importNotice}
+        onLocaleToggle={() => setLocale(locale === "zh" ? "en" : "zh")}
         onNoteSaved={(notePath) => updatePaperNote(selectedPaper.id, notePath)}
         onRerun={() => void rerunPaper(selectedPaper.id)}
         paper={selectedPaper}
@@ -466,114 +549,246 @@ export function App({
     );
   }
 
+  const displayedStatus = buildLibraryStatus(papers, status, locale);
+
   return (
-    <main className="app-shell">
-      <section className="library-hero">
+    <main className="home">
+      <TopNav
+        agentStatus={agentStatus}
+        locale={locale}
+        mode="home"
+        onLocaleToggle={() => setLocale(locale === "zh" ? "en" : "zh")}
+      />
+      <header className="masthead">
         <div>
           <p className="eyebrow">{text.eyebrow}</p>
-          <h1>{text.libraryTitle}</h1>
-          <p>{text.heroDescription}</p>
-          <p className={`agent-chip ${agentStatus?.configured ? "ready" : "missing"}`}>
-            {text.agentLabel}: {agentStatus?.configured ? `${text.configured} (${agentStatus.mode})` : text.missingKey}
-          </p>
-          <button type="button" className="language-toggle" onClick={() => setLocale(locale === "zh" ? "en" : "zh")}>
-            {text.languageToggle}
-          </button>
+          <h1 className="masthead-title">{text.libraryTitle}</h1>
+          <p className="masthead-standfirst">{text.heroDescription}</p>
         </div>
-        <label className="import-card">
-          <span>{text.importPdf}</span>
-          <input
-            aria-label={text.importPdf}
-            accept="application/pdf"
-            type="file"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                void handleImport(file);
-              }
-            }}
-          />
-        </label>
-      </section>
-      <section className="arxiv-import panel">
-        <div>
-          <h2>{text.arxivImportTitle}</h2>
-          <p className="muted">{text.arxivPlaceholder}</p>
-        </div>
-        <input
-          aria-label={text.arxivImportTitle}
-          placeholder={text.arxivPlaceholder}
-          value={arxivInput}
-          onChange={(event) => setArxivInput(event.target.value)}
-        />
-        <button type="button" onClick={() => void handleArxivImport()}>
-          {text.importArxiv}
-        </button>
-      </section>
-      <section className="arxiv-import panel">
-        <div>
-          <h2>{text.urlImportTitle}</h2>
-          <p className="muted">{text.urlPlaceholder}</p>
-        </div>
-        <input
-          aria-label={text.urlImportTitle}
-          placeholder={text.urlPlaceholder}
-          value={urlInput}
-          onChange={(event) => setUrlInput(event.target.value)}
-        />
-        <button type="button" onClick={() => void handleUrlImport()}>
-          {text.importUrl}
-        </button>
-      </section>
-      <section className="arxiv-import panel">
-        <div>
-          <h2>{text.zoteroImportTitle}</h2>
-          <p className="muted">~/Zotero/zotero.sqlite</p>
-        </div>
-        <button type="button" onClick={() => void handleZoteroImport()}>
-          {text.zoteroImportButton}
-        </button>
-      </section>
-      {error ? <p className="warning">{error}</p> : null}
+      </header>
 
-      <section className="library-grid">
-        <LibraryPanel title={text.recentPapers}>
-          {papers.map((paper) => (
-            <article className="paper-card" key={paper.id}>
-              <div>
-                <h2>{paper.title}</h2>
-                <PaperMetadataChips paper={paper} />
-                <p className="muted">{paper.pdf_path}</p>
-                <StatusBadge locale={locale} status={paper.status} />
-                {paper.note_path ? <p className="muted">{text.notePrefix} {paper.note_path}</p> : null}
-              </div>
-              <button type="button" onClick={() => void openPaper(paper)}>
-                {text.openPaper(paper.title)}
+      <section className="import-drawer" id="import">
+        <div className="import-drawer-head">
+          <h2 className="label-section">{text.importsLabel}</h2>
+        </div>
+        <div className="import-grid">
+          <div className="import-field import-field-pdf">
+            <h3 className="import-field-title">{text.importPdf}</h3>
+            <p className="import-field-hint">{text.importPdfHint}</p>
+            <input
+              aria-label={text.importPdf}
+              accept="application/pdf"
+              type="file"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  void handleImport(file);
+                }
+              }}
+            />
+          </div>
+
+          <div className="import-field">
+            <h3 className="import-field-title">{text.arxivImportTitle}</h3>
+            <p className="import-field-hint">{text.arxivPlaceholder}</p>
+            <div className="import-row">
+              <input
+                aria-label={text.arxivImportTitle}
+                placeholder={text.arxivPlaceholder}
+                value={arxivInput}
+                onChange={(event) => setArxivInput(event.target.value)}
+              />
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => void handleArxivImport()}
+              >
+                {text.importArxiv}
               </button>
-            </article>
-          ))}
-        </LibraryPanel>
+            </div>
+          </div>
 
-        <LibraryPanel title={text.processingStatus}>
-          <p className="muted">{localizeTaskMessage(status, locale)}</p>
-        </LibraryPanel>
+          <div className="import-field">
+            <h3 className="import-field-title">{text.urlImportTitle}</h3>
+            <p className="import-field-hint">{text.urlPlaceholder}</p>
+            <div className="import-row">
+              <input
+                aria-label={text.urlImportTitle}
+                placeholder={text.urlPlaceholder}
+                value={urlInput}
+                onChange={(event) => setUrlInput(event.target.value)}
+              />
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => void handleUrlImport()}
+              >
+                {text.importUrl}
+              </button>
+            </div>
+          </div>
 
-        <LibraryPanel title={text.savedReports}>
-          {papers.map((paper) => (
-            <p key={paper.id}>{paper.note_path ?? text.noNote}</p>
-          ))}
-        </LibraryPanel>
+          <div className="import-field">
+            <h3 className="import-field-title">{text.zoteroImportTitle}</h3>
+            <p className="import-field-hint mono">{text.zoteroPath}</p>
+            <div className="import-row">
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => void handleZoteroImport()}
+              >
+                {text.zoteroImportButton}
+              </button>
+            </div>
+          </div>
+        </div>
       </section>
+
+      {error ? <p className="warning-line">{error}</p> : null}
+      {importNotice ? <p className="notice-line">{importNotice}</p> : null}
+
+      <section className="paper-section" id="papers">
+        <div className="paper-section-head">
+          <h2 className="label-section">{text.recentPapers}</h2>
+          <span className="count">{text.paperCount(papers.length)}</span>
+        </div>
+        {papers.length === 0 ? (
+          <p className="paper-list-empty">
+            {locale === "zh"
+              ? "文献库还是空的。导入第一篇 PDF / arXiv / URL 开始。"
+              : "Library is empty. Import a PDF, arXiv link, or URL to begin."}
+          </p>
+        ) : (
+          <ol className="paper-list">
+            {papers.map((paper, idx) => (
+              <li className="paper-row" key={paper.id}>
+                <span className="paper-ord">
+                  {String(idx + 1).padStart(2, "0")}
+                </span>
+                <div className="paper-body">
+                  <h3 className="paper-title">{paper.title}</h3>
+                  <PaperMetadataLine paper={paper} />
+                  <p className="paper-path">{paper.pdf_path}</p>
+                  {paper.note_path ? (
+                    <p className="paper-note-line">
+                      {text.notePrefix} <span className="mono">{paper.note_path}</span>
+                    </p>
+                  ) : null}
+                </div>
+                <div className="paper-actions">
+                  <StatusBadge locale={locale} status={paper.status} />
+                  <button
+                    type="button"
+                    className={`btn-link ${pendingDeleteId === paper.id ? "is-danger" : ""}`}
+                    aria-label={
+                      pendingDeleteId === paper.id
+                        ? text.confirmDeletePaper(paper.title)
+                        : text.deletePaper(paper.title)
+                    }
+                    onClick={() => void deletePaper(paper)}
+                  >
+                    {pendingDeleteId === paper.id
+                      ? text.confirmDeletePaperAction
+                      : text.deletePaperAction}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    aria-label={text.openPaper(paper.title)}
+                    onClick={() => void openPaper(paper)}
+                  >
+                    {text.openPaperAction}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
+      <footer className="footer-strip">
+        <div className="footer-block">
+          <h2 className="label-section">{text.processingStatus}</h2>
+          <p>{displayedStatus}</p>
+        </div>
+        <div className="footer-block">
+          <h2 className="label-section">{text.savedReports}</h2>
+          <ul className="saved-reports-list">
+            {papers.length === 0 ? (
+              <li className="empty">{text.noNote}</li>
+            ) : (
+              papers.map((paper) => (
+                <li
+                  key={paper.id}
+                  className={paper.note_path ? "" : "empty"}
+                >
+                  {paper.note_path ?? text.noNote}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      </footer>
     </main>
   );
 }
 
-function LibraryPanel({ title, children }: { title: string; children: React.ReactNode }) {
+/* ============================================================================
+   Workspace
+   ============================================================================ */
+
+function TopNav({
+  agentStatus,
+  currentTitle,
+  locale,
+  mode,
+  onBack,
+  onLocaleToggle,
+}: {
+  agentStatus: AgentStatus | null;
+  currentTitle?: string;
+  locale: Locale;
+  mode: "home" | "workspace";
+  onBack?: () => void;
+  onLocaleToggle: () => void;
+}) {
+  const text = UI_TEXT[locale];
   return (
-    <section className="panel">
-      <h2>{title}</h2>
-      {children}
-    </section>
+    <nav className="top-nav" aria-label={locale === "zh" ? "全局导航" : "Global navigation"}>
+      <div className="top-nav-brand">
+        <a href={mode === "home" ? "#import" : "#report"}>Paperflow</a>
+        <span>{mode === "home" ? text.librarySection : (currentTitle ?? text.readingReport)}</span>
+      </div>
+      <div className="top-nav-links">
+        {mode === "workspace" && onBack ? (
+          <button type="button" className="top-nav-back" onClick={onBack}>
+            {text.backToLibrary}
+          </button>
+        ) : null}
+        {mode === "home" ? (
+          <>
+            <a href="#import">{text.navImport}</a>
+            <a href="#papers">{text.navPapers}</a>
+          </>
+        ) : (
+          <>
+            <a href="#report">{text.navReport}</a>
+            <a href="#field-map">{text.navFieldMap}</a>
+          </>
+        )}
+        <span
+          className={`agent-chip ${agentStatus?.configured ? "ready" : "missing"}`}
+        >
+          {text.agentLabel} ·{" "}
+          {agentStatus?.configured
+            ? `${text.configured} (${agentStatus.mode})`
+            : text.missingKey}
+        </span>
+        <button type="button" className="language-toggle" onClick={onLocaleToggle}>
+          {text.languageToggle}
+        </button>
+      </div>
+    </nav>
   );
 }
 
@@ -582,6 +797,9 @@ function Workspace({
   report,
   client,
   locale,
+  agentStatus,
+  importNotice,
+  onLocaleToggle,
   onNoteSaved,
   onRerun,
   onBack,
@@ -590,6 +808,9 @@ function Workspace({
   report?: ReadingReport;
   client: PaperflowClient;
   locale: Locale;
+  agentStatus: AgentStatus | null;
+  importNotice?: string | null;
+  onLocaleToggle: () => void;
   onNoteSaved: (notePath: string) => void;
   onRerun: () => void;
   onBack: () => void;
@@ -599,13 +820,17 @@ function Workspace({
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<Claim | null>(null);
   const [notePath, setNotePath] = useState<string | null>(paper.note_path ?? null);
-  const [selectedClaim, setSelectedClaim] = useState<Claim | null>(report?.summary[0] ?? null);
+  const [selectedClaim, setSelectedClaim] = useState<Claim | null>(
+    report?.summary[0] ?? null,
+  );
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [pdfPage, setPdfPage] = useState(1);
   const [r1Running, setR1Running] = useState(false);
   const [r1Error, setR1Error] = useState<string | null>(null);
   const [r1Trace, setR1Trace] = useState<R1QueryTraceEntry[]>([]);
-  const [relatedOverride, setRelatedOverride] = useState<RelatedWorkItem[] | null>(null);
+  const [relatedOverride, setRelatedOverride] = useState<RelatedWorkItem[] | null>(
+    null,
+  );
   const [fieldMap, setFieldMap] = useState<FieldMap | null>(null);
   const [fieldMapRunning, setFieldMapRunning] = useState(false);
   const [fieldMapError, setFieldMapError] = useState<string | null>(null);
@@ -619,7 +844,8 @@ function Workspace({
     }
   }, [report, selectedClaim]);
 
-  // Jump the PDF viewer to the first evidence page when the user picks a claim.
+  // When the user selects a claim, jump the PDF viewer to the first evidence
+  // page so the highlight is immediately visible.
   useEffect(() => {
     const firstEvidence = selectedClaim?.evidence?.[0];
     if (firstEvidence?.page) {
@@ -647,7 +873,7 @@ function Workspace({
       const result = await client.askSelection(paper.id, { quote, page });
       setAnswer(result);
     } catch {
-      // Backend may not yet be running; swallow silently to keep UX calm.
+      /* swallow */
     }
   }
 
@@ -665,7 +891,9 @@ function Workspace({
       setRelatedOverride(result.items);
       setR1Trace(result.query_trace || []);
     } catch (caught) {
-      setR1Error(caught instanceof Error ? caught.message : "R1 search failed");
+      setR1Error(
+        caught instanceof Error ? caught.message : "R1 search failed",
+      );
     } finally {
       setR1Running(false);
     }
@@ -680,7 +908,9 @@ function Workspace({
         : await client.createFieldMap(paper.id);
       setFieldMap(fm);
     } catch (caught) {
-      setFieldMapError(caught instanceof Error ? caught.message : "Field Map failed");
+      setFieldMapError(
+        caught instanceof Error ? caught.message : "Field Map failed",
+      );
     } finally {
       setFieldMapRunning(false);
     }
@@ -688,16 +918,29 @@ function Workspace({
 
   if (!report) {
     return (
-      <main className="workspace workspace-two-column">
-        <section className="report-pane empty-report">
-          <button type="button" onClick={onBack}>
-            {text.backToLibrary}
-          </button>
-          <h1>{displayTitle}</h1>
-          <StatusBadge locale={locale} status={paper.status} />
-          <p>{paper.status?.message ? localizeTaskMessage(paper.status.message, locale) : text.reportNotReady}</p>
+      <main className="workspace">
+        <TopNav
+          agentStatus={agentStatus}
+          currentTitle={displayTitle}
+          locale={locale}
+          mode="workspace"
+          onBack={onBack}
+          onLocaleToggle={onLocaleToggle}
+        />
+        <section className="workspace-main">
+          {importNotice ? <p className="notice-line">{importNotice}</p> : null}
+          <div className="empty-report">
+            <h2 className="eyebrow">{text.readingReport}</h2>
+            <h1>{displayTitle}</h1>
+            <StatusBadge locale={locale} status={paper.status} />
+            <p>
+              {paper.status?.message
+                ? localizeTaskMessage(paper.status.message, locale)
+                : text.reportNotReady}
+            </p>
+          </div>
         </section>
-        <SidePanel
+        <Rail
           answer={answer}
           locale={locale}
           notePath={notePath}
@@ -713,30 +956,38 @@ function Workspace({
     );
   }
 
+  const related = relatedOverride ?? report.related_work;
+
   return (
-    <main className="workspace workspace-two-column">
-      <section className="report-pane">
-        <div className="report-header">
-          <button type="button" onClick={onBack}>
-            {text.backToLibrary}
-          </button>
-          <div>
-            <p className="eyebrow">{text.readingReport}</p>
-            <h2>{text.readingReport}</h2>
-            <h1>{displayTitle}</h1>
-            <p className="muted">{paper.pdf_path}</p>
+    <main className="workspace">
+      <TopNav
+        agentStatus={agentStatus}
+        currentTitle={displayTitle}
+        locale={locale}
+        mode="workspace"
+        onBack={onBack}
+        onLocaleToggle={onLocaleToggle}
+      />
+      <section className="workspace-main">
+        {importNotice ? <p className="notice-line">{importNotice}</p> : null}
+
+        <header className="report-head" id="report">
+          <h2 className="eyebrow">{text.readingReport}</h2>
+          <h1>{displayTitle}</h1>
+          <p className="path-line">{paper.pdf_path}</p>
+          <div className="report-head-tools">
+            <StatusBadge locale={locale} status={paper.status} />
+            {isReportReady ? (
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setPdfViewerOpen((v) => !v)}
+              >
+                {pdfViewerOpen ? text.disableViewer : text.enableViewer}
+              </button>
+            ) : null}
           </div>
-          <StatusBadge locale={locale} status={paper.status} />
-          {isReportReady ? (
-            <button
-              type="button"
-              className="pdf-toggle"
-              onClick={() => setPdfViewerOpen((v) => !v)}
-            >
-              {pdfViewerOpen ? text.disableViewer : text.enableViewer}
-            </button>
-          ) : null}
-        </div>
+        </header>
 
         {pdfViewerOpen && isReportReady ? (
           <section className="pdf-viewer-shell">
@@ -750,64 +1001,87 @@ function Workspace({
           </section>
         ) : null}
 
-        <h3>{text.executiveSummary}</h3>
-        {report.summary.map((claim) => (
-          <ClaimCard
-            claim={claim}
-            key={claim.id}
-            locale={locale}
-            selected={selectedClaim?.id === claim.id}
-            onSelect={setSelectedClaim}
-          />
-        ))}
+        {report.summary.length > 0 ? (
+          <section className="report-section">
+            <div className="section-head">
+              <h3>{text.executiveSummary}</h3>
+            </div>
+            <ol className="claim-list">
+              {report.summary.map((claim, idx) => (
+                <ClaimItem
+                  claim={claim}
+                  key={claim.id}
+                  locale={locale}
+                  ord={idx + 1}
+                  selected={selectedClaim?.id === claim.id}
+                  onSelect={setSelectedClaim}
+                />
+              ))}
+            </ol>
+          </section>
+        ) : null}
 
         {report.sections.map((section) => (
           <section className="report-section" key={section.id}>
-            <h3>{localizeSectionTitle(section.title, locale)}</h3>
-            {section.claims.map((claim) => (
-              <ClaimCard
-                claim={claim}
-                key={claim.id}
-                locale={locale}
-                selected={selectedClaim?.id === claim.id}
-                onSelect={setSelectedClaim}
-              />
-            ))}
+            <div className="section-head">
+              <h3>{localizeSectionTitle(section.title, locale)}</h3>
+            </div>
+            <ol className="claim-list">
+              {section.claims.map((claim, idx) => (
+                <ClaimItem
+                  claim={claim}
+                  key={claim.id}
+                  locale={locale}
+                  ord={idx + 1}
+                  selected={selectedClaim?.id === claim.id}
+                  onSelect={setSelectedClaim}
+                />
+              ))}
+            </ol>
           </section>
         ))}
 
         <section className="report-section">
-          <div className="r1-header">
+          <div className="section-head">
             <h3>{text.relatedWork}</h3>
-            <button type="button" onClick={() => void runR1Search()} disabled={r1Running}>
-              {r1Running ? text.r1Running : text.r1RunSearch}
-            </button>
+            <div className="section-head-actions">
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => void runR1Search()}
+                disabled={r1Running}
+              >
+                {r1Running ? text.r1Running : text.r1RunSearch}
+              </button>
+            </div>
           </div>
-          {r1Error ? <p className="warning">{text.r1Failed}{r1Error}</p> : null}
-          {(relatedOverride ?? report.related_work).map((item) => (
-            <article className="claim-card r1-card" key={item.id}>
-              <span className={`badge ${item.reliability.toLowerCase()}`}>
-                {item.reliability}
-              </span>
-              <strong>{item.title}</strong>
-              <RelatedWorkChips item={item} locale={locale} />
-              <p>{item.relation}</p>
-              {item.evidence?.[0]?.quote ? (
-                <blockquote className="r1-tldr">{item.evidence[0].quote}</blockquote>
-              ) : null}
-              <p className="muted">{item.source}</p>
-              {item.comparison_risk ? (
-                <p className="warning small">{text.r1ComparisonRisk}{item.comparison_risk}</p>
-              ) : null}
-            </article>
-          ))}
+          {r1Error ? (
+            <p className="warning-line">
+              {text.r1Failed}
+              {r1Error}
+            </p>
+          ) : null}
+          <ol className="related-list">
+            {related.map((item, idx) => (
+              <RelatedItem
+                item={item}
+                key={item.id}
+                locale={locale}
+                ord={idx + 1}
+              />
+            ))}
+          </ol>
           {r1Trace.length > 0 ? (
             <details className="r1-trace">
               <summary>{text.r1QueryTrace}</summary>
               <ul>
                 {r1Trace.map((entry, idx) => (
                   <li key={`${entry.lane}-${idx}`}>
-                    <code>[{entry.lane}/{entry.source}]</code> {entry.query} → {entry.count}
+                    <code>
+                      [{entry.lane}/{entry.source}]
+                    </code>
+                    <span>{entry.query}</span>
+                    <span className="trace-count">{entry.count}</span>
                   </li>
                 ))}
               </ul>
@@ -824,7 +1098,7 @@ function Workspace({
         />
       </section>
 
-      <SidePanel
+      <Rail
         answer={answer}
         locale={locale}
         notePath={notePath}
@@ -840,33 +1114,89 @@ function Workspace({
   );
 }
 
-function ClaimCard({
+/* ============================================================================
+   Pieces
+   ============================================================================ */
+
+function ClaimItem({
   claim,
   locale,
+  ord,
   onSelect,
   selected = false,
 }: {
   claim: Claim;
   locale: Locale;
+  ord: number;
   onSelect?: (claim: Claim) => void;
   selected?: boolean;
 }) {
   const text = UI_TEXT[locale];
   return (
-    <article className={`claim-card ${selected ? "selected" : ""}`}>
-      <div className="claim-row">
-        <span className={`badge ${claim.reliability.toLowerCase()}`}>{claim.reliability}</span>
-        <p>{claim.text}</p>
+    <li className={`claim-item ${selected ? "selected" : ""}`}>
+      <span className="claim-ord">{String(ord).padStart(2, "0")}</span>
+      <div className="claim-body">
+        <p className="claim-text">
+          <span className={`badge ${claim.reliability.toLowerCase()}`}>
+            {claim.reliability}
+          </span>{" "}
+          {claim.text}
+        </p>
+        {claim.uncertainty ? (
+          <p className="claim-uncertainty">{claim.uncertainty}</p>
+        ) : null}
       </div>
-      {claim.uncertainty ? <p className="warning">{claim.uncertainty}</p> : null}
-      <button type="button" onClick={() => onSelect?.(claim)}>
-        {text.evidenceButton(claim.evidence.length)}
-      </button>
-    </article>
+      <div className="claim-actions">
+        <button
+          type="button"
+          className="btn-link"
+          onClick={() => onSelect?.(claim)}
+        >
+          {text.evidenceButton(claim.evidence.length)}
+        </button>
+      </div>
+    </li>
   );
 }
 
-function SidePanel({
+function RelatedItem({
+  item,
+  locale,
+  ord,
+}: {
+  item: RelatedWorkItem;
+  locale: Locale;
+  ord: number;
+}) {
+  const text = UI_TEXT[locale];
+  return (
+    <li className="related-item">
+      <span className="paper-ord">{String(ord).padStart(2, "0")}</span>
+      <div className="related-body">
+        <h4 className="related-title">
+          <span className={`badge ${item.reliability.toLowerCase()}`}>
+            {item.reliability}
+          </span>
+          {item.title}
+        </h4>
+        <RelatedMetaLine item={item} locale={locale} />
+        <p className="related-relation">{item.relation}</p>
+        {item.evidence?.[0]?.quote ? (
+          <p className="related-tldr">{item.evidence[0].quote}</p>
+        ) : null}
+        <p className="related-source">{item.source}</p>
+        {item.comparison_risk ? (
+          <p className="warning small">
+            {text.r1ComparisonRisk}
+            {item.comparison_risk}
+          </p>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function Rail({
   answer,
   locale,
   notePath,
@@ -891,167 +1221,245 @@ function SidePanel({
 }) {
   const text = UI_TEXT[locale];
   return (
-    <aside className="side-panel">
-      <section className="side-card">
-        <p className="eyebrow">{text.agentStatus}</p>
+    <aside className="workspace-rail">
+      <section className="rail-block">
+        <p className="label-section">{text.agentStatus}</p>
         <StatusBadge locale={locale} status={paper.status} />
-        <p className="muted">{paper.status?.message ? localizeTaskMessage(paper.status.message, locale) : text.noActiveTask}</p>
-        <button type="button" onClick={onRerun}>
+        <p className="rail-message">
+          {paper.status?.message
+            ? localizeTaskMessage(paper.status.message, locale)
+            : text.noActiveTask}
+        </p>
+        <button type="button" className="btn-link" onClick={onRerun}>
           {text.rerunAgent}
         </button>
       </section>
 
-      <section className="side-card">
-        <p className="eyebrow">{text.evidenceDetail}</p>
+      <section className="rail-block">
+        <p className="label-section">{text.evidenceDetail}</p>
         {selectedClaim ? (
           <>
-            <strong>{text.selectedClaim}</strong>
-            <p>{selectedClaim.text}</p>
+            <p className="rail-evidence-claim">{selectedClaim.text}</p>
             {selectedClaim.evidence.length > 0 ? (
-              <div className="evidence-list">
+              <div className="rail-evidence">
                 {selectedClaim.evidence.map((evidence) => (
-                  <blockquote key={evidence.id}>
-                    <strong>{evidence.source}</strong>
-                    {evidence.page ? <span>{text.page(evidence.page)}</span> : null}
-                    {evidence.section ? <span> · {evidence.section}</span> : null}
-                    <p>{evidence.quote}</p>
-                    <LocationStatusBadge evidence={evidence} locale={locale} />
-                  </blockquote>
+                  <div className="evidence-block" key={evidence.id}>
+                    <p className="evidence-quote">{evidence.quote}</p>
+                    <p className="evidence-meta">
+                      <span>{evidence.source}</span>
+                      {evidence.page ? (
+                        <span>{text.page(evidence.page)}</span>
+                      ) : null}
+                      {evidence.section ? <span>{evidence.section}</span> : null}
+                      <LocationGlyph evidence={evidence} locale={locale} />
+                    </p>
+                  </div>
                 ))}
               </div>
             ) : (
-              <p className="warning">{text.missingEvidence}</p>
+              <p className="rail-message warning">{text.missingEvidence}</p>
             )}
           </>
         ) : (
-          <p className="muted">{text.selectClaim}</p>
+          <p className="rail-message muted-soft">{text.selectClaim}</p>
         )}
       </section>
 
-      <section className="side-card chat-panel">
-        <p className="eyebrow">{text.focusedQa}</p>
+      <section className="rail-block rail-ask">
+        <p className="label-section">{text.focusedQa}</p>
         <input
           placeholder={text.askPlaceholder}
           value={question}
           onChange={(event) => onQuestionChange(event.target.value)}
         />
-        <button type="button" onClick={() => void onAsk()}>
+        <button type="button" className="btn-link" onClick={() => void onAsk()}>
           {text.ask}
         </button>
-        {answer ? <ClaimCard claim={answer} locale={locale} /> : null}
+        {answer ? (
+          <div className="rail-answer">
+            <span className={`badge ${answer.reliability.toLowerCase()}`}>
+              {answer.reliability}
+            </span>
+            <p className="answer-text">{answer.text}</p>
+          </div>
+        ) : null}
       </section>
 
-      <section className="side-card">
-        <p className="eyebrow">{text.obsidian}</p>
-        <button type="button" onClick={() => void onExport()}>
+      <section className="rail-block">
+        <p className="label-section">{text.obsidian}</p>
+        <button
+          type="button"
+          className="btn-link"
+          onClick={() => void onExport()}
+        >
           {text.saveNote}
         </button>
-        {notePath ? <p className="muted">{text.savedTo(notePath)}</p> : <p className="muted">{text.noNote}</p>}
+        {notePath ? (
+          <p className="rail-saved">{text.savedTo(notePath)}</p>
+        ) : (
+          <p className="rail-message muted-soft">{text.noNote}</p>
+        )}
       </section>
     </aside>
   );
 }
 
-function StatusBadge({ status, locale }: { status?: TaskStatus; locale: Locale }) {
+function StatusBadge({
+  status,
+  locale,
+}: {
+  status?: TaskStatus;
+  locale: Locale;
+}) {
   const stage = status?.stage ?? "unknown";
   const text = UI_TEXT[locale];
-  return <span className={`status-badge ${stage}`}>{text.statusLabels[stage as keyof typeof text.statusLabels] ?? stage}</span>;
+  const label =
+    text.statusLabels[stage as keyof typeof text.statusLabels] ?? stage;
+  return <span className={`status-badge ${stage}`}>{label}</span>;
 }
 
-function RelatedWorkChips({ item, locale }: { item: RelatedWorkItem; locale: Locale }) {
+function LocationGlyph({
+  evidence,
+  locale,
+}: {
+  evidence: Evidence;
+  locale: Locale;
+}) {
   const text = UI_TEXT[locale];
-  const chips: { key: string; label: string }[] = [];
-  const authors = item.authors ?? [];
-  if (authors.length > 0) {
-    const head = authors.slice(0, 3).join(", ");
-    chips.push({ key: "authors", label: authors.length > 3 ? `${head}, …` : head });
-  }
-  if (item.year) {
-    chips.push({ key: "year", label: String(item.year) });
-  }
-  if (item.venue) {
-    chips.push({ key: "venue", label: item.venue });
-  }
-  if (item.citation_count != null) {
-    chips.push({ key: "cites", label: text.r1CitedBy(item.citation_count) });
-  }
-  if (item.influential_citation_count != null) {
-    chips.push({
-      key: "influence",
-      label: text.r1InfluentialCitedBy(item.influential_citation_count),
-    });
-  }
-  if (item.arxiv_id) {
-    chips.push({ key: "arxiv", label: `arXiv:${item.arxiv_id}` });
-  }
-  if (item.doi) {
-    chips.push({ key: "doi", label: `DOI:${item.doi}` });
-  }
-  if (chips.length === 0) {
-    return null;
-  }
-  return (
-    <p className="meta-chips">
-      {chips.map((chip) => (
-        <span key={chip.key} className={`meta-chip meta-chip-${chip.key}`}>
-          {chip.label}
-        </span>
-      ))}
-    </p>
-  );
-}
-
-function LocationStatusBadge({ evidence, locale }: { evidence: Evidence; locale: Locale }) {
-  const text = UI_TEXT[locale];
-  const status = evidence.location_status ?? (evidence.page ? "page_and_quote" : "quote_only");
+  const status =
+    evidence.location_status ?? (evidence.page ? "page_and_quote" : "quote_only");
   const labels: Record<string, string> = {
     exact: text.locationExact,
     page_and_quote: text.locationPageQuote,
     quote_only: text.locationQuoteOnly,
     missing: text.locationMissing,
   };
-  return <span className={`location-badge location-${status}`}>{labels[status] ?? status}</span>;
+  return (
+    <span className={`location-glyph location-${status}`}>
+      {labels[status] ?? status}
+    </span>
+  );
 }
 
-function PaperMetadataChips({ paper }: { paper: Paper }) {
-  const metadata = paper.metadata ?? null;
-  if (!metadata) {
-    return null;
-  }
-  const chips: { key: string; label: string }[] = [];
-  const authors = metadata.authors ?? [];
+function RelatedMetaLine({
+  item,
+  locale,
+}: {
+  item: RelatedWorkItem;
+  locale: Locale;
+}) {
+  const text = UI_TEXT[locale];
+  const parts: { key: string; node: React.ReactNode }[] = [];
+  const authors = item.authors ?? [];
   if (authors.length > 0) {
     const head = authors.slice(0, 3).join(", ");
-    chips.push({ key: "authors", label: authors.length > 3 ? `${head}, …` : head });
+    parts.push({
+      key: "authors",
+      node: <span>{authors.length > 3 ? `${head}, et al.` : head}</span>,
+    });
   }
-  if (metadata.year) {
-    chips.push({ key: "year", label: String(metadata.year) });
+  if (item.year) {
+    parts.push({ key: "year", node: <span className="mono">{item.year}</span> });
   }
-  if (metadata.venue) {
-    chips.push({ key: "venue", label: metadata.venue });
+  if (item.venue) {
+    parts.push({ key: "venue", node: <span>{item.venue}</span> });
   }
-  if (metadata.arxiv_id) {
-    chips.push({ key: "arxiv", label: `arXiv:${metadata.arxiv_id}` });
+  if (item.citation_count != null) {
+    parts.push({
+      key: "cites",
+      node: <span className="mono">{text.r1CitedBy(item.citation_count)}</span>,
+    });
   }
-  if (metadata.doi) {
-    chips.push({ key: "doi", label: `DOI:${metadata.doi}` });
+  if (item.influential_citation_count != null) {
+    parts.push({
+      key: "influence",
+      node: (
+        <span className="mono">
+          {text.r1InfluentialCitedBy(item.influential_citation_count)}
+        </span>
+      ),
+    });
   }
-  if (metadata.source_type && metadata.source_type !== "local_pdf") {
-    chips.push({ key: "source", label: metadata.source_type });
+  if (item.arxiv_id) {
+    parts.push({
+      key: "arxiv",
+      node: <span className="mono">arXiv:{item.arxiv_id}</span>,
+    });
   }
-  if (chips.length === 0) {
+  if (item.doi) {
+    parts.push({
+      key: "doi",
+      node: <span className="mono">DOI:{item.doi}</span>,
+    });
+  }
+  if (parts.length === 0) {
     return null;
   }
   return (
-    <p className="meta-chips">
-      {chips.map((chip) => (
-        <span key={chip.key} className={`meta-chip meta-chip-${chip.key}`}>
-          {chip.label}
-        </span>
+    <p className="meta-line">
+      {parts.map((part) => (
+        <span key={part.key}>{part.node}</span>
       ))}
     </p>
   );
 }
+
+function PaperMetadataLine({ paper }: { paper: Paper }) {
+  const metadata = paper.metadata ?? null;
+  if (!metadata) {
+    return null;
+  }
+  const parts: { key: string; node: React.ReactNode }[] = [];
+  const authors = metadata.authors ?? [];
+  if (authors.length > 0) {
+    const head = authors.slice(0, 3).join(", ");
+    parts.push({
+      key: "authors",
+      node: <span>{authors.length > 3 ? `${head}, et al.` : head}</span>,
+    });
+  }
+  if (metadata.year) {
+    parts.push({
+      key: "year",
+      node: <span className="mono">{metadata.year}</span>,
+    });
+  }
+  if (metadata.venue) {
+    parts.push({ key: "venue", node: <span>{metadata.venue}</span> });
+  }
+  if (metadata.arxiv_id) {
+    parts.push({
+      key: "arxiv",
+      node: <span className="mono">arXiv:{metadata.arxiv_id}</span>,
+    });
+  }
+  if (metadata.doi) {
+    parts.push({
+      key: "doi",
+      node: <span className="mono">DOI:{metadata.doi}</span>,
+    });
+  }
+  if (metadata.source_type && metadata.source_type !== "local_pdf") {
+    parts.push({
+      key: "source",
+      node: <span className="mono">{metadata.source_type}</span>,
+    });
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  return (
+    <p className="meta-line">
+      {parts.map((part) => (
+        <span key={part.key}>{part.node}</span>
+      ))}
+    </p>
+  );
+}
+
+/* ============================================================================
+   Field Map
+   ============================================================================ */
 
 function FieldMapSection({
   fieldMap,
@@ -1068,166 +1476,378 @@ function FieldMapSection({
 }) {
   const text = UI_TEXT[locale];
   return (
-    <section className="report-section field-map-section">
-      <div className="r1-header">
+    <section className="report-section field-map-section" id="field-map">
+      <div className="section-head">
         <h3>{text.fieldMapTitle}</h3>
-        <button type="button" onClick={onGenerate} disabled={running}>
-          {running
-            ? text.fieldMapRunning
-            : fieldMap
-            ? text.fieldMapRegenerate
-            : text.fieldMapGenerate}
-        </button>
+        <div className="section-head-actions">
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={onGenerate}
+            disabled={running}
+          >
+            {running
+              ? text.fieldMapRunning
+              : fieldMap
+                ? text.fieldMapRegenerate
+                : text.fieldMapGenerate}
+          </button>
+        </div>
       </div>
       {error ? (
-        <p className="warning">
+        <p className="warning-line">
           {text.fieldMapFailed}
           {error}
         </p>
       ) : null}
-      {!fieldMap ? <p className="muted">{text.fieldMapEmpty}</p> : null}
+      {!fieldMap ? <p className="field-map-empty">{text.fieldMapEmpty}</p> : null}
       {fieldMap ? <FieldMapBody fieldMap={fieldMap} locale={locale} /> : null}
     </section>
   );
 }
 
-function FieldMapBody({ fieldMap, locale }: { fieldMap: FieldMap; locale: Locale }) {
+function FieldMapBody({
+  fieldMap,
+  locale,
+}: {
+  fieldMap: FieldMap;
+  locale: Locale;
+}) {
   const text = UI_TEXT[locale];
   return (
-    <div className="field-map-body">
-      {fieldMap.field_summary ? (
-        <article className="field-map-summary">
-          <h4>{text.fieldMapSummary}</h4>
-          <p>{fieldMap.field_summary}</p>
-        </article>
+    <>
+      <div className="field-map-body">
+        {fieldMap.field_summary ? (
+          <article className="field-map-summary">
+            <h4>{text.fieldMapSummary}</h4>
+            <p>{fieldMap.field_summary}</p>
+          </article>
+        ) : (
+          <article className="field-map-summary">
+            <h4>{text.fieldMapSummary}</h4>
+            <p className="muted-soft">{text.fieldMapEmpty}</p>
+          </article>
+        )}
+
+        <div className="field-map-taxa">
+          <FieldMapTaxon
+            label={text.fieldMapTaskTaxonomy}
+            items={fieldMap.task_taxonomy}
+          />
+          <FieldMapTaxon
+            label={text.fieldMapDatasets}
+            items={fieldMap.datasets_benchmarks}
+          />
+          <FieldMapTaxon label={text.fieldMapMetrics} items={fieldMap.metrics} />
+          <FieldMapTaxon
+            label={text.fieldMapMethodFamilies}
+            items={fieldMap.method_families}
+          />
+        </div>
+      </div>
+
+      {fieldMap.relationship_graph?.nodes.length ? (
+        <RelationshipGraph graph={fieldMap.relationship_graph} locale={locale} />
       ) : null}
 
-      <FieldMapTags label={text.fieldMapTaskTaxonomy} items={fieldMap.task_taxonomy} />
-      <FieldMapTags label={text.fieldMapDatasets} items={fieldMap.datasets_benchmarks} />
-      <FieldMapTags label={text.fieldMapMetrics} items={fieldMap.metrics} />
-      <FieldMapTags label={text.fieldMapMethodFamilies} items={fieldMap.method_families} />
-
       {fieldMap.milestones.length > 0 ? (
-        <article>
+        <article className="field-map-milestones">
           <h4>{text.fieldMapMilestones}</h4>
-          <ul className="field-map-list">
-            {fieldMap.milestones.map((ms) => (
-              <FieldMapMilestone key={ms.id} milestone={ms} locale={locale} />
+          <ol className="milestone-list">
+            {fieldMap.milestones.map((ms, idx) => (
+              <MilestoneItem
+                key={ms.id}
+                milestone={ms}
+                ord={idx + 1}
+                locale={locale}
+              />
             ))}
-          </ul>
+          </ol>
         </article>
       ) : null}
 
       {fieldMap.timeline.length > 0 ? (
-        <article>
+        <article className="field-map-timeline-wrap">
           <h4>{text.fieldMapTimeline}</h4>
-          <ol className="field-map-timeline">
+          <ol className="timeline-list">
             {fieldMap.timeline.map((event) => (
-              <FieldMapTimelineEntry key={event.id} event={event} />
+              <TimelineItem key={event.id} event={event} />
             ))}
           </ol>
         </article>
       ) : null}
 
       {fieldMap.open_problems.length > 0 ? (
-        <FieldMapClaimList title={text.fieldMapOpenProblems} claims={fieldMap.open_problems} />
+        <PullList
+          title={text.fieldMapOpenProblems}
+          claims={fieldMap.open_problems}
+        />
       ) : null}
       {fieldMap.recent_trends.length > 0 ? (
-        <FieldMapClaimList title={text.fieldMapRecentTrends} claims={fieldMap.recent_trends} />
+        <PullList
+          title={text.fieldMapRecentTrends}
+          claims={fieldMap.recent_trends}
+        />
       ) : null}
       {fieldMap.research_opportunities.length > 0 ? (
-        <FieldMapClaimList
+        <PullList
           title={text.fieldMapOpportunities}
           claims={fieldMap.research_opportunities}
         />
       ) : null}
-    </div>
+    </>
   );
 }
 
-function FieldMapTags({ label, items }: { label: string; items: string[] }) {
+function RelationshipGraph({
+  graph,
+  locale,
+}: {
+  graph: FieldMapRelationshipGraph;
+  locale: Locale;
+}) {
+  const text = UI_TEXT[locale];
+  const nodes = graph.nodes.slice(0, 12);
+  const columns = {
+    predecessor: nodes.filter((node) => node.role === "predecessor"),
+    seed: nodes.filter((node) => node.role === "seed"),
+    successor: nodes.filter((node) => node.role !== "predecessor" && node.role !== "seed"),
+  };
+  const columnDefs = [
+    { key: "predecessor", label: text.fieldMapGraphPredecessor, x: 92, nodes: columns.predecessor },
+    { key: "seed", label: text.fieldMapGraphSeed, x: 360, nodes: columns.seed },
+    { key: "successor", label: text.fieldMapGraphSuccessor, x: 628, nodes: columns.successor },
+  ];
+  const positions = new Map<string, { x: number; y: number }>();
+  columnDefs.forEach((column) => {
+    const count = Math.max(1, column.nodes.length);
+    column.nodes.forEach((node, idx) => {
+      const y = 78 + ((idx + 1) * 220) / (count + 1);
+      positions.set(node.id, { x: column.x, y });
+    });
+  });
+
+  return (
+    <article className="relationship-graph-wrap">
+      <h4>{text.fieldMapRelationshipGraph}</h4>
+      <div className="relationship-graph" aria-label={text.fieldMapRelationshipGraph}>
+        <svg viewBox="0 0 720 340">
+          <defs>
+            <marker
+              id="graph-arrow"
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" />
+            </marker>
+          </defs>
+          {columnDefs.map((column) => (
+            <text key={column.key} className="relationship-column-label" x={column.x} y="28">
+              {column.label}
+            </text>
+          ))}
+          {graph.edges.map((edge) => {
+            const source = positions.get(edge.source);
+            const target = positions.get(edge.target);
+            if (!source || !target) return null;
+            const mid = (source.x + target.x) / 2;
+            return (
+              <path
+                key={edge.id}
+                className="relationship-edge"
+                d={`M ${source.x + 44} ${source.y} C ${mid} ${source.y}, ${mid} ${target.y}, ${target.x - 44} ${target.y}`}
+                markerEnd="url(#graph-arrow)"
+              />
+            );
+          })}
+          {nodes.map((node) => {
+            const pos = positions.get(node.id);
+            if (!pos) return null;
+            const reliability = node.reliability ?? "R1";
+            const roleLabel = relationshipRoleLabel(node.role, locale);
+            const tooltipX = pos.x < 360 ? pos.x + 46 : pos.x - 266;
+            const tooltipY = Math.max(42, pos.y - 54);
+            const tooltipLabel = `${node.title} · ${roleLabel}${
+              node.year ? ` · ${node.year}` : ""
+            } · ${reliability}`;
+            return (
+              <g
+                key={node.id}
+                aria-label={tooltipLabel}
+                className={`relationship-node relationship-node-${node.role}`}
+                role="img"
+                tabIndex={0}
+              >
+                <title>{tooltipLabel}</title>
+                <circle cx={pos.x} cy={pos.y} r="34" />
+                <text className="relationship-node-year" x={pos.x} y={pos.y - 6}>
+                  {node.year ?? "seed"}
+                </text>
+                <text className="relationship-node-kind" x={pos.x} y={pos.y + 12}>
+                  {node.event_type.replace("_", " ")}
+                </text>
+                <foreignObject
+                  className="relationship-tooltip"
+                  height="96"
+                  width="220"
+                  x={tooltipX}
+                  y={tooltipY}
+                >
+                  <div className="relationship-tooltip-card">
+                    <p className="relationship-tooltip-title">{node.title}</p>
+                    <p className="relationship-tooltip-meta">
+                      <span>{roleLabel}</span>
+                      {node.year ? <span>{node.year}</span> : null}
+                      <span>{reliability}</span>
+                    </p>
+                  </div>
+                </foreignObject>
+              </g>
+            );
+          })}
+        </svg>
+        <ol className="relationship-node-list">
+          {nodes.map((node) => (
+            <RelationshipNodeRow key={node.id} node={node} />
+          ))}
+        </ol>
+      </div>
+    </article>
+  );
+}
+
+function relationshipRoleLabel(role: string, locale: Locale) {
+  const text = UI_TEXT[locale];
+  if (role === "predecessor") return text.fieldMapGraphPredecessor;
+  if (role === "seed") return text.fieldMapGraphSeed;
+  return text.fieldMapGraphSuccessor;
+}
+
+function RelationshipNodeRow({
+  node,
+}: {
+  node: FieldMapRelationshipGraph["nodes"][number];
+}) {
+  const reliability = node.reliability ?? "R1";
+  return (
+    <li className={`relationship-node-row is-${node.role}`}>
+      <span className={`badge ${reliability.toLowerCase()}`}>{reliability}</span>
+      <span className="relationship-node-title">{node.title}</span>
+      {node.year ? <span className="mono">{node.year}</span> : null}
+    </li>
+  );
+}
+
+function FieldMapTaxon({ label, items }: { label: string; items: string[] }) {
   if (!items || items.length === 0) {
     return null;
   }
   return (
     <article>
       <h4>{label}</h4>
-      <p className="meta-chips">
+      <p className="field-map-tag-text">
         {items.map((item, idx) => (
-          <span key={`${item}-${idx}`} className="meta-chip meta-chip-fm">
-            {item}
-          </span>
+          <span key={`${item}-${idx}`}>{item}</span>
         ))}
       </p>
     </article>
   );
 }
 
-function FieldMapMilestone({
+function MilestoneItem({
   milestone,
+  ord,
   locale,
 }: {
   milestone: MilestonePaper;
+  ord: number;
   locale: Locale;
 }) {
   const text = UI_TEXT[locale];
   return (
-    <li className="field-map-milestone">
-      <div className="field-map-milestone-row">
-        <strong>{milestone.title}</strong>
-        <span className="badge r1">{milestone.category}</span>
-        <span className="muted small">score {milestone.milestone_score.toFixed(2)}</span>
-      </div>
-      <p className="muted small">
-        {milestone.authors.slice(0, 3).join(", ")}
-        {milestone.authors.length > 3 ? ", …" : ""} {milestone.year ? `· ${milestone.year}` : ""}{" "}
-        {milestone.venue ? `· ${milestone.venue}` : ""}
-        {milestone.velocity ? ` · ${milestone.velocity}/yr` : ""}
-      </p>
-      <p className="small">
-        <em>{text.fieldMapWhy}</em>
-        {milestone.why_milestone}
-      </p>
-      {milestone.risk ? (
-        <p className="warning small">
-          {text.fieldMapRisk}
-          {milestone.risk}
+    <li className="milestone-item">
+      <span className="milestone-ord">{String(ord).padStart(2, "0")}</span>
+      <div>
+        <p className="milestone-title">{milestone.title}</p>
+        <p className="milestone-meta">
+          {milestone.authors.length > 0 ? (
+            <span>
+              {milestone.authors.slice(0, 3).join(", ")}
+              {milestone.authors.length > 3 ? ", et al." : ""}
+            </span>
+          ) : null}
+          {milestone.year ? (
+            <span className="mono">{milestone.year}</span>
+          ) : null}
+          {milestone.venue ? <span>{milestone.venue}</span> : null}
+          {milestone.velocity ? (
+            <span className="mono">{milestone.velocity}/yr</span>
+          ) : null}
         </p>
-      ) : null}
+        <p className="milestone-category">{milestone.category}</p>
+        <p className="milestone-why">{milestone.why_milestone}</p>
+        {milestone.risk ? (
+          <p className="milestone-risk">
+            {text.fieldMapRisk}
+            {milestone.risk}
+          </p>
+        ) : null}
+      </div>
+      <span className="milestone-score">
+        {milestone.milestone_score.toFixed(2)}
+      </span>
     </li>
   );
 }
 
-function FieldMapTimelineEntry({ event }: { event: TimelineEvent }) {
+function TimelineItem({ event }: { event: TimelineEvent }) {
   return (
-    <li className={`field-map-timeline-item field-map-event-${event.event_type}`}>
-      <span className="field-map-year">{event.year ?? "—"}</span>
-      <span className="field-map-event-type">{event.event_type}</span>
-      <strong>{event.title}</strong>
-      {event.venue ? <span className="muted small"> · {event.venue}</span> : null}
-      {event.key_idea ? <p className="small muted">{event.key_idea}</p> : null}
+    <li className="timeline-item">
+      <span className="timeline-year">{event.year ?? "—"}</span>
+      <div className="timeline-body">
+        <span className={`timeline-type is-${event.event_type}`}>
+          {event.event_type.replace("_", " ")}
+        </span>
+        <p className="timeline-title">
+          {event.title}
+          {event.venue ? <span className="meta"> · {event.venue}</span> : null}
+        </p>
+        {event.key_idea ? <p className="timeline-key">{event.key_idea}</p> : null}
+      </div>
     </li>
   );
 }
 
-function FieldMapClaimList({ title, claims }: { title: string; claims: Claim[] }) {
+function PullList({ title, claims }: { title: string; claims: Claim[] }) {
   return (
-    <article>
+    <article className="field-map-pull">
       <h4>{title}</h4>
-      <ul className="field-map-list">
+      <ul className="pull-list">
         {claims.map((claim) => (
-          <li key={claim.id}>
-            <span className={`badge ${claim.reliability.toLowerCase()}`}>{claim.reliability}</span>{" "}
-            {claim.text}
-            {claim.uncertainty ? (
-              <p className="muted small">{claim.uncertainty}</p>
-            ) : null}
+          <li className="pull-item" key={claim.id}>
+            <span className={`badge ${claim.reliability.toLowerCase()}`}>
+              {claim.reliability}
+            </span>
+            <div className="pull-item-body">
+              <p className="pull-item-text">{claim.text}</p>
+              {claim.uncertainty ? (
+                <p className="pull-item-meta">{claim.uncertainty}</p>
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>
     </article>
   );
 }
+
+/* ============================================================================
+   Helpers
+   ============================================================================ */
 
 function readInitialLocale(): Locale {
   if (typeof window === "undefined") {
@@ -1251,6 +1871,37 @@ function localizeTaskMessage(message: string, locale: Locale) {
 function localizeSectionTitle(title: string, locale: Locale) {
   const sectionTitles = UI_TEXT[locale].sectionTitles as Record<string, string>;
   return sectionTitles[title] ?? title;
+}
+
+function buildLibraryStatus(papers: Paper[], status: string, locale: Locale) {
+  const active = papers.filter((paper) =>
+    ["queued", "processing"].includes(paper.status?.stage ?? ""),
+  ).length;
+  const failed = papers.filter((paper) => paper.status?.stage === "failed").length;
+  const completed = papers.filter((paper) => paper.status?.stage === "completed").length;
+  const idleStatus = status === UI_TEXT.en.readyStatus || status === "Reading report generated";
+
+  if (!idleStatus && active === 0) {
+    return localizeTaskMessage(status, locale);
+  }
+
+  if (locale === "zh") {
+    if (papers.length === 0) {
+      return "文献库为空，等待导入第一篇论文。";
+    }
+    const failedPart = failed > 0 ? `，${failed} 篇失败` : "";
+    const activePart = active > 0 ? `，${active} 篇处理中` : "，当前没有后台任务";
+    return `${papers.length} 篇论文，${completed} 篇报告已完成${activePart}${failedPart}。`;
+  }
+
+  if (papers.length === 0) {
+    return "Library is empty, waiting for the first paper.";
+  }
+  const failedPart = failed > 0 ? `, ${failed} failed` : "";
+  const activePart = active > 0 ? `, ${active} in progress` : ", no background tasks";
+  return `${papers.length} paper${papers.length === 1 ? "" : "s"}, ${completed} report${
+    completed === 1 ? "" : "s"
+  } completed${activePart}${failedPart}.`;
 }
 
 function sleep(ms: number) {

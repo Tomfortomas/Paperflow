@@ -70,12 +70,37 @@ describe("Paperflow app", () => {
   it("renders a Library-first home with import, recent papers, status, and saved reports", () => {
     render(<App initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
 
-    expect(screen.getByRole("heading", { name: /paperflow 文献库/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /全局导航/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: /paperflow/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /paperflow 文献库/i })).not.toBeInTheDocument();
     expect(screen.getByText(/导入 PDF/i)).toBeInTheDocument();
     expect(screen.getByText(/最近论文/i)).toBeInTheDocument();
     expect(screen.getByText(/处理状态/i)).toBeInTheDocument();
     expect(screen.getByText(/已保存报告/i)).toBeInTheDocument();
-    expect(screen.getByText("Paperflow")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "Paperflow" })).toBeInTheDocument();
+    expect(screen.queryByText(/已准备好自动执行/)).not.toBeInTheDocument();
+    expect(screen.getByText(/1 篇论文，1 篇报告已完成/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /打开 paperflow/i })).toHaveTextContent(/^打开$/);
+    expect(screen.getByRole("button", { name: /删除 paperflow/i })).toHaveTextContent(/^删除$/);
+  });
+
+  it("deletes a paper after inline confirmation", async () => {
+    const user = userEvent.setup();
+    const client = fakeClient({
+      deletePaper: vi.fn().mockResolvedValue(undefined),
+    });
+
+    render(<App client={client} initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
+
+    await user.click(screen.getByRole("button", { name: /删除 paperflow/i }));
+    expect(screen.getByRole("button", { name: /确认删除 paperflow/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /确认删除 paperflow/i })).toHaveTextContent(/^确认删除$/);
+
+    await user.click(screen.getByRole("button", { name: /确认删除 paperflow/i }));
+
+    expect(client.deletePaper).toHaveBeenCalledWith("paper-1");
+    expect(screen.queryByRole("heading", { level: 3, name: "Paperflow" })).not.toBeInTheDocument();
+    expect(screen.getByText(/文献库还是空的/)).toBeInTheDocument();
   });
 
   it("toggles the interface between Chinese and English", async () => {
@@ -95,6 +120,8 @@ describe("Paperflow app", () => {
 
     await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
 
+    expect(screen.getByRole("button", { name: /返回文献库/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /field map/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /阅读报告/i })).toBeInTheDocument();
     expect(screen.getAllByText("Paperflow is a paper reading IDE.")[0]).toBeInTheDocument();
     expect(screen.getAllByText("R0")[0]).toBeInTheDocument();
@@ -114,6 +141,46 @@ describe("Paperflow app", () => {
     await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
 
     expect(screen.getByRole("button", { name: /打开 PDF 阅读器/i })).toBeInTheDocument();
+  });
+
+  it("renders a Field Map lineage graph", async () => {
+    const user = userEvent.setup();
+    const client = fakeClient({
+      createFieldMap: vi.fn().mockResolvedValue({
+        id: "fm-1",
+        seed_paper_id: "paper-1",
+        seed_title: "Actual Paper Title",
+        field_summary: "A compact field map.",
+        task_taxonomy: [],
+        datasets_benchmarks: [],
+        metrics: [],
+        milestones: [],
+        timeline: [],
+        method_families: [],
+        evaluation_protocols: [],
+        open_problems: [],
+        recent_trends: [],
+        research_opportunities: [],
+        evidence_index: [],
+        relationship_graph: {
+          nodes: [
+            { id: "old", title: "Old Foundation", role: "predecessor", year: 2017, event_type: "milestone" },
+            { id: "seed", title: "Actual Paper Title", role: "seed", year: 2024, event_type: "other" },
+          ],
+          edges: [{ id: "old-seed", source: "old", target: "seed", relation: "precedes" }],
+        },
+      }),
+    });
+
+    render(<App client={client} initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+    await user.click(screen.getByRole("button", { name: /生成 Field Map/i }));
+
+    expect(await screen.findByText(/前后关系图/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Old Foundation").length).toBeGreaterThan(0);
+    expect(screen.getByRole("img", { name: /Old Foundation · 前置基础 · 2017 · R1/i })).toBeInTheDocument();
+    expect(screen.getAllByText("Actual Paper Title")[0]).toBeInTheDocument();
   });
 
   it("imports a PDF without blocking and opens the report after status polling completes", async () => {
@@ -183,6 +250,38 @@ describe("Paperflow app", () => {
     expect(client.importArxiv).toHaveBeenCalledWith("https://arxiv.org/abs/2605.08063v1");
     expect(client.getStatus).toHaveBeenCalledWith("paper-arxiv");
   });
+
+  it("surfaces duplicate import warnings from the backend", async () => {
+    const user = userEvent.setup();
+    const replacementPaper: Paper = {
+      id: "paper-arxiv-new",
+      title: "Same arXiv Paper",
+      pdf_path: "/vault/pdfs/Same arXiv Paper.pdf",
+      status: { stage: "queued", message: "Queued", progress: 0.05 },
+    };
+    const client = fakeClient({
+      importArxiv: vi.fn().mockResolvedValue({
+        id: "session-new",
+        paper: replacementPaper,
+        status: replacementPaper.status,
+        report: null,
+        duplicate_warning: "疑似重复：已替换同 arXiv 编号的旧条目。",
+        duplicate_of: paper,
+      }),
+      getStatus: vi.fn().mockResolvedValue({
+        stage: "completed",
+        message: "Reading report generated",
+        progress: 1,
+      }),
+      getReport: vi.fn().mockResolvedValue({ ...report, paper_id: "paper-arxiv-new" }),
+    });
+
+    render(<App client={client} initialPapers={[paper]} />);
+    await user.type(screen.getByLabelText(/从 arxiv 导入/i), "https://arxiv.org/abs/2605.08063v2");
+    await user.click(screen.getByRole("button", { name: /下载并解析/i }));
+
+    expect(await screen.findByText(/疑似重复/)).toBeInTheDocument();
+  });
 });
 
 function fakeClient(overrides: Partial<PaperflowClient> = {}): PaperflowClient {
@@ -193,6 +292,7 @@ function fakeClient(overrides: Partial<PaperflowClient> = {}): PaperflowClient {
     importUrl: vi.fn(),
     importZotero: vi.fn().mockResolvedValue({ imported: 0, sessions: [] }),
     previewZotero: vi.fn().mockResolvedValue([]),
+    deletePaper: vi.fn(),
     getStatus: vi.fn(),
     getReport: vi.fn(),
     askPaper: vi.fn(),

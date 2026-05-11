@@ -7,7 +7,7 @@ from threading import Thread
 from typing import Dict, List, Optional
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -285,6 +285,13 @@ def create_app(
     @app.get("/api/papers")
     def list_papers():
         return storage.list_papers()
+
+    @app.delete("/api/papers/{paper_id}", status_code=204)
+    def delete_paper(paper_id: str):
+        reports.pop(paper_id, None)
+        if not storage.delete_paper(paper_id):
+            raise HTTPException(status_code=404, detail="Paper not found")
+        return Response(status_code=204)
 
     @app.get("/api/papers/{paper_id}/status")
     def get_status(paper_id: str):

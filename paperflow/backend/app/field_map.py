@@ -29,6 +29,9 @@ from app.models import (
     Evidence,
     EvidenceLocationStatus,
     FieldMap,
+    FieldMapGraphEdge,
+    FieldMapGraphNode,
+    FieldMapRelationshipGraph,
     MilestoneCategory,
     MilestonePaper,
     PaperMetadata,
@@ -104,6 +107,7 @@ def build_field_map(
     research_opportunities = _research_opportunities(milestones, candidates)
     field_summary = _field_summary(seed_metadata, milestones, timeline)
     evidence_index = _evidence_index(milestones, timeline)
+    relationship_graph = _relationship_graph(seed_metadata, timeline)
 
     return FieldMap(
         id=field_map_id or f"fm-{uuid.uuid4().hex[:12]}",
@@ -121,6 +125,7 @@ def build_field_map(
         recent_trends=recent_trends,
         research_opportunities=research_opportunities,
         evidence_index=evidence_index,
+        relationship_graph=relationship_graph,
         generated_at=time.time(),
     )
 
@@ -156,6 +161,79 @@ def _now_year() -> int:
     from datetime import datetime
 
     return datetime.utcnow().year
+
+
+def _relationship_graph(
+    seed_metadata: PaperMetadata,
+    timeline: Sequence[TimelineEvent],
+    *,
+    limit: int = 12,
+) -> FieldMapRelationshipGraph:
+    """Build a compact predecessor → seed → successor graph from timeline events."""
+
+    seed_title = seed_metadata.title or "Seed paper"
+    seed_year = seed_metadata.year
+    nodes: List[FieldMapGraphNode] = []
+    seen: set[str] = set()
+
+    def add_node(event: TimelineEvent, role: str) -> None:
+        node_id = event.id or f"node-{len(nodes)}"
+        if node_id in seen:
+            return
+        seen.add(node_id)
+        nodes.append(
+            FieldMapGraphNode(
+                id=node_id,
+                title=event.title,
+                role=role,
+                year=event.year,
+                event_type=event.event_type,
+                reliability=event.reliability,
+            )
+        )
+
+    seed_event = next((event for event in timeline if event.title == seed_title or event.id == "tl-seed"), None)
+    if seed_event is None:
+        seed_event = TimelineEvent(
+            id="tl-seed",
+            title=seed_title,
+            year=seed_year,
+            reliability=ReliabilityLevel.R0,
+        )
+
+    for event in timeline[:limit]:
+        if event.id == seed_event.id or event.title == seed_title:
+            add_node(seed_event, "seed")
+            continue
+        if seed_year is not None and event.year is not None:
+            role = "predecessor" if event.year <= seed_year else "successor"
+        else:
+            role = "predecessor" if not any(node.role == "seed" for node in nodes) else "successor"
+        add_node(event, role)
+
+    if not any(node.role == "seed" for node in nodes):
+        add_node(seed_event, "seed")
+
+    seed_node = next((node for node in nodes if node.role == "seed"), None)
+    edges: List[FieldMapGraphEdge] = []
+    if seed_node is not None:
+        for node in nodes:
+            if node.id == seed_node.id:
+                continue
+            if node.role == "predecessor":
+                source, target = node.id, seed_node.id
+            else:
+                source, target = seed_node.id, node.id
+            edges.append(
+                FieldMapGraphEdge(
+                    id=f"edge-{source}-{target}"[:80],
+                    source=source,
+                    target=target,
+                    relation="precedes",
+                )
+            )
+
+    return FieldMapRelationshipGraph(nodes=nodes, edges=edges)
 
 
 def _surface_topics(

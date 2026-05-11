@@ -141,6 +141,8 @@ export interface PaperSession {
   paper: Paper;
   status: TaskStatus;
   report?: ReadingReport | null;
+  duplicate_of?: Paper | null;
+  duplicate_warning?: string | null;
 }
 
 export interface AgentStatus {
@@ -206,6 +208,29 @@ export interface TimelineEvent {
   influence?: string | null;
   reliability: ReliabilityLevel;
   evidence: Evidence[];
+}
+
+export type FieldMapGraphNodeRole = "predecessor" | "seed" | "successor" | string;
+
+export interface FieldMapGraphNode {
+  id: string;
+  title: string;
+  role: FieldMapGraphNodeRole;
+  year?: number | null;
+  event_type: TimelineEventType;
+  reliability?: ReliabilityLevel;
+}
+
+export interface FieldMapGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  relation: string;
+}
+
+export interface FieldMapRelationshipGraph {
+  nodes: FieldMapGraphNode[];
+  edges: FieldMapGraphEdge[];
 }
 
 export interface ComparisonCell {
@@ -285,5 +310,6 @@ export interface FieldMap {
   recent_trends: Claim[];
   research_opportunities: Claim[];
   evidence_index: Evidence[];
+  relationship_graph?: FieldMapRelationshipGraph;
   generated_at?: number | null;
 }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import sqlite3
 import uuid
@@ -135,8 +136,7 @@ class PaperStorage:
 
         chosen_title = (metadata.title or title or source_path.stem).strip() or source_path.stem
 
-        if replace_existing:
-            self._delete_by_dedup(metadata, fallback_title=chosen_title)
+        duplicates = self._delete_by_dedup(metadata, fallback_title=chosen_title) if replace_existing else []
 
         paper_id = str(uuid.uuid4())
         session_id = str(uuid.uuid4())
@@ -185,7 +185,15 @@ class PaperStorage:
                 (session_id, paper.id, status.stage, status.message, status.progress),
             )
 
-        return PaperSession(id=session_id, paper=paper, status=status)
+        duplicate_of = duplicates[0][0] if duplicates else None
+        duplicate_reason = duplicates[0][1] if duplicates else None
+        return PaperSession(
+            id=session_id,
+            paper=paper,
+            status=status,
+            duplicate_of=duplicate_of,
+            duplicate_warning=_duplicate_warning(duplicate_reason, duplicate_of),
+        )
 
     # --------------------------------------------------------------- read
 
@@ -231,7 +239,18 @@ class PaperStorage:
         if not key:
             return None
         with self._connect() as conn:
-            if kind in {"content_hash", "doi", "arxiv_id", "semantic_scholar_id", "openreview_id"}:
+            if kind == "arxiv_id":
+                candidates = conn.execute(
+                    f"select papers.*, sessions.stage as session_stage, "
+                    f"sessions.message as session_message, sessions.progress as session_progress "
+                    f"from papers left join sessions on sessions.paper_id = papers.id "
+                    f"where papers.arxiv_id is not null"
+                ).fetchall()
+                row = next(
+                    (candidate for candidate in candidates if _canonical_arxiv_id(candidate["arxiv_id"]) == key),
+                    None,
+                )
+            elif kind in {"content_hash", "doi", "semantic_scholar_id", "openreview_id"}:
                 row = conn.execute(
                     f"select papers.*, sessions.stage as session_stage, "
                     f"sessions.message as session_message, sessions.progress as session_progress "
@@ -347,23 +366,84 @@ class PaperStorage:
                 ).fetchall()
             self._delete_rows(conn, rows)
 
-    def _delete_by_dedup(self, metadata: PaperMetadata, *, fallback_title: str) -> None:
+    def delete_paper(self, paper_id: str) -> bool:
+        """Delete one library entry and all local artifacts owned by it."""
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                "select id, pdf_path, note_path from papers where id = ?",
+                (paper_id,),
+            ).fetchall()
+            if not rows:
+                return False
+            self._delete_rows(conn, rows)
+        return True
+
+    def _delete_by_dedup(self, metadata: PaperMetadata, *, fallback_title: str) -> List[tuple[Paper, str]]:
         """Delete any existing rows that match the new paper's strongest dedup key."""
 
-        kind, key = dedup_key_from_metadata(metadata)
+        matches: List[tuple[Paper, str]] = []
         with self._connect() as conn:
-            rows = []
-            if kind in {"content_hash", "doi", "arxiv_id", "semantic_scholar_id", "openreview_id"} and key:
-                rows = conn.execute(
-                    f"select id, pdf_path, note_path from papers where {kind} = ?",
-                    (key,),
-                ).fetchall()
-            if not rows and fallback_title:
-                rows = conn.execute(
-                    "select id, pdf_path, note_path from papers where title = ?",
-                    (fallback_title,),
-                ).fetchall()
-            self._delete_rows(conn, rows)
+            rows = self._matching_duplicate_rows(conn, metadata, fallback_title=fallback_title)
+            for row, reason in rows:
+                matches.append((self._row_to_paper(row), reason))
+            self._delete_rows(conn, [row for row, _ in rows])
+        return matches
+
+    def _matching_duplicate_rows(
+        self,
+        conn: sqlite3.Connection,
+        metadata: PaperMetadata,
+        *,
+        fallback_title: str,
+    ) -> List[tuple[sqlite3.Row, str]]:
+        base_query = (
+            "select papers.*, sessions.stage as session_stage, "
+            "sessions.message as session_message, sessions.progress as session_progress "
+            "from papers left join sessions on sessions.paper_id = papers.id "
+        )
+        rows: List[tuple[sqlite3.Row, str]] = []
+
+        if metadata.arxiv_id:
+            target = _canonical_arxiv_id(metadata.arxiv_id)
+            candidates = conn.execute(f"{base_query} where papers.arxiv_id is not null").fetchall()
+            rows = [
+                (row, "arxiv_id")
+                for row in candidates
+                if _canonical_arxiv_id(row["arxiv_id"]) == target
+            ]
+            if rows:
+                return rows
+
+        for kind, value, reason in [
+            ("doi", metadata.doi.lower() if metadata.doi else None, "doi"),
+            ("semantic_scholar_id", metadata.semantic_scholar_id, "semantic_scholar_id"),
+            ("openreview_id", metadata.openreview_id, "openreview_id"),
+            ("content_hash", metadata.content_hash, "content_hash"),
+        ]:
+            if value:
+                found = conn.execute(f"{base_query} where papers.{kind} = ?", (value,)).fetchall()
+                if found:
+                    return [(row, reason) for row in found]
+
+        _kind, key = dedup_key_from_metadata(metadata)
+        if key and fallback_title:
+            found = conn.execute(
+                f"{base_query} where papers.title = ?",
+                (key if _kind == "title_author_year" else fallback_title,),
+            ).fetchall()
+            if found:
+                return [(row, "title") for row in found]
+
+        if fallback_title:
+            found = conn.execute(
+                f"{base_query} where papers.title = ?",
+                (fallback_title,),
+            ).fetchall()
+            if found:
+                return [(row, "title") for row in found]
+
+        return rows
 
     def _delete_rows(self, conn: sqlite3.Connection, rows: List[sqlite3.Row]) -> None:
         for row in rows:
@@ -371,9 +451,21 @@ class PaperStorage:
             conn.execute("delete from papers where id = ?", (row["id"],))
             report_path = self.report_dir / f"{row['id']}.json"
             self._unlink_if_exists(report_path)
+            self._unlink_if_exists(self.chunks_path(row["id"]))
+            self._unlink_if_exists(self.r1_path(row["id"]))
+            self._delete_field_maps_for_seed(row["id"])
             self._unlink_if_exists(Path(row["pdf_path"]))
             if row["note_path"]:
                 self._unlink_if_exists(Path(row["note_path"]))
+
+    def _delete_field_maps_for_seed(self, paper_id: str) -> None:
+        for path in self.field_map_dir().glob("*.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except ValueError:
+                continue
+            if payload.get("seed_paper_id") == paper_id:
+                self._unlink_if_exists(path)
 
     def _unlink_if_exists(self, path: Path) -> None:
         try:
@@ -497,3 +589,22 @@ def _sha256_of_file(path: Path) -> str:
         for chunk in iter(lambda: fh.read(1 << 16), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _canonical_arxiv_id(value: str) -> str:
+    return re.sub(r"v\d+$", "", value.strip().lower())
+
+
+def _duplicate_warning(reason: Optional[str], duplicate: Optional[Paper]) -> Optional[str]:
+    if duplicate is None:
+        return None
+    reason_labels = {
+        "arxiv_id": "同 arXiv 编号",
+        "doi": "同 DOI",
+        "semantic_scholar_id": "同 Semantic Scholar ID",
+        "openreview_id": "同 OpenReview ID",
+        "content_hash": "同 PDF 内容",
+        "title": "相同标题",
+    }
+    label = reason_labels.get(reason or "", "疑似重复")
+    return f"疑似重复：已替换{label}的旧条目「{duplicate.title}」。"

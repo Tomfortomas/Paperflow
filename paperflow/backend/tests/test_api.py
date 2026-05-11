@@ -88,6 +88,35 @@ def test_reimport_different_bytes_with_same_filename_keeps_both(tmp_path: Path) 
     assert len(hashes) == 2
 
 
+def test_reimport_same_arxiv_replaces_existing_and_warns(tmp_path: Path, monkeypatch) -> None:
+    def fake_get(url, follow_redirects, timeout):
+        content = b"%PDF-1.4\nAbstract: v2 bytes" if "v2" in url else b"%PDF-1.4\nAbstract: v1 bytes"
+        return FakeDownloadResponse(content)
+
+    monkeypatch.setattr("app.main.httpx.get", fake_get)
+    monkeypatch.setattr(
+        "app.main.fetch_metadata_from_url",
+        lambda identifier: PaperMetadata(
+            title="Same arXiv Paper",
+            arxiv_id="2605.08063v2" if "v2" in identifier else "2605.08063v1",
+            source_type=ImportSourceType.ARXIV,
+            source_url=f"https://arxiv.org/abs/{identifier}",
+        ),
+    )
+    app = create_app(tmp_path / "data", report_service=ReportService(agent=FakePaperAgent()))
+    client = TestClient(app)
+
+    first = client.post("/api/papers/import-arxiv", json={"url": "https://arxiv.org/abs/2605.08063v1"}).json()
+    wait_for_status(client, first["paper"]["id"], "completed")
+    second = client.post("/api/papers/import-arxiv", json={"url": "https://arxiv.org/abs/2605.08063v2"}).json()
+
+    library = client.get("/api/papers").json()
+    assert len(library) == 1
+    assert library[0]["id"] == second["paper"]["id"]
+    assert second["duplicate_warning"]
+    assert second["duplicate_of"]["id"] == first["paper"]["id"]
+
+
 def test_report_persists_after_app_restart(tmp_path: Path) -> None:
     storage_root = tmp_path / "data"
     app = create_app(storage_root, report_service=ReportService(agent=FakePaperAgent()))
@@ -104,6 +133,34 @@ def test_report_persists_after_app_restart(tmp_path: Path) -> None:
 
     assert report.status_code == 200
     assert report.json()["summary"][0]["text"] == "AI agent summary"
+
+
+def test_delete_paper_removes_library_entry_and_artifacts(tmp_path: Path) -> None:
+    storage_root = tmp_path / "data"
+    app = create_app(storage_root, report_service=ReportService(agent=FakePaperAgent()))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("delete-me.pdf", b"Abstract: delete me", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+    pdf_path = Path(response.json()["paper"]["pdf_path"])
+    wait_for_status(client, paper_id, "completed")
+    report_path = storage_root / "reports" / f"{paper_id}.json"
+
+    note = client.post(f"/api/papers/{paper_id}/export-obsidian").json()
+    note_path = Path(note["note_path"])
+
+    delete_response = client.delete(f"/api/papers/{paper_id}")
+
+    assert delete_response.status_code == 204
+    assert client.get("/api/papers").json() == []
+    assert client.get(f"/api/papers/{paper_id}/status").status_code == 404
+    assert client.get(f"/api/papers/{paper_id}/report").status_code == 404
+    assert not pdf_path.exists()
+    assert not report_path.exists()
+    assert not note_path.exists()
 
 
 def test_import_returns_before_agent_completes_and_status_can_be_polled(tmp_path: Path) -> None:

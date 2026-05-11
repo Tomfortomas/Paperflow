@@ -124,6 +124,8 @@ class PaperSession(BaseModel):
     paper: Paper
     status: TaskStatus
     report: Optional[ReadingReport] = None
+    duplicate_of: Optional[Paper] = None
+    duplicate_warning: Optional[str] = None
 
 
 # ----------------------------------------------------------------------- Phase 4: Field Map
@@ -196,6 +198,33 @@ class TimelineEvent(BaseModel):
     influence: Optional[str] = None
     reliability: ReliabilityLevel = ReliabilityLevel.R1
     evidence: List[Evidence] = Field(default_factory=list)
+
+
+class FieldMapGraphNode(BaseModel):
+    """One node in the Field Map lineage graph."""
+
+    id: str
+    title: str
+    role: str  # "predecessor" | "seed" | "successor"
+    year: Optional[int] = None
+    event_type: TimelineEventType = TimelineEventType.OTHER
+    reliability: ReliabilityLevel = ReliabilityLevel.R1
+
+
+class FieldMapGraphEdge(BaseModel):
+    """Directed edge between two Field Map lineage nodes."""
+
+    id: str
+    source: str
+    target: str
+    relation: str = "precedes"
+
+
+class FieldMapRelationshipGraph(BaseModel):
+    """Left-to-right predecessor → seed → successor graph."""
+
+    nodes: List[FieldMapGraphNode] = Field(default_factory=list)
+    edges: List[FieldMapGraphEdge] = Field(default_factory=list)
 
 
 class ComparisonCell(BaseModel):
@@ -293,4 +322,5 @@ class FieldMap(BaseModel):
     recent_trends: List[Claim] = Field(default_factory=list)
     research_opportunities: List[Claim] = Field(default_factory=list)
     evidence_index: List[Evidence] = Field(default_factory=list)
+    relationship_graph: FieldMapRelationshipGraph = Field(default_factory=FieldMapRelationshipGraph)
     generated_at: Optional[float] = None

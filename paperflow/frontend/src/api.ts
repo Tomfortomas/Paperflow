@@ -29,6 +29,7 @@ export interface PaperflowClient {
   importUrl(url: string): Promise<PaperSession>;
   importZotero(itemKey?: string): Promise<ZoteroImportResult>;
   previewZotero(): Promise<ZoteroPreviewItem[]>;
+  deletePaper(paperId: string): Promise<void>;
   getStatus(paperId: string): Promise<TaskStatus>;
   getReport(paperId: string): Promise<ReadingReport>;
   askPaper(paperId: string, question: string): Promise<Claim>;
@@ -93,6 +94,9 @@ export function createPaperflowClient(baseUrl = "http://127.0.0.1:8000"): Paperf
     },
     async previewZotero() {
       return request<ZoteroPreviewItem[]>(`${baseUrl}/api/zotero/preview`);
+    },
+    async deletePaper(paperId: string) {
+      await request<void>(`${baseUrl}/api/papers/${paperId}`, { method: "DELETE" });
     },
     async getReport(paperId: string) {
       return request<ReadingReport>(`${baseUrl}/api/papers/${paperId}/report`);
@@ -197,6 +201,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
+  }
+  if (response.status === 204) {
+    return undefined as T;
   }
   return response.json();
 }
