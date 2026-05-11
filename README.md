@@ -41,7 +41,12 @@ It is opinionated:
 
 ## Status
 
-PaperFlow currently ships the **V1.1** workbench:
+PaperFlow currently ships **two front-ends** on top of the same V1.1 backend agent harness:
+
+- **Web** — React + Vite + TypeScript, two-column Report-first Workspace.
+- **TUI** — Textual + httpx, keyboard-driven, same Library / Workspace / R0-R1-R2 / Evidence / Q&A / Obsidian flow inside your terminal.
+
+V1.1 workbench features:
 
 - Library-first home with status tracking (`queued` → `processing` → `completed` / `failed`)
 - DeepSeek-backed PaperAgent generating R0 Reading Reports
@@ -67,27 +72,36 @@ Planned next:
 
 ## Architecture
 
+PaperFlow ships two front-ends sharing the same backend agent harness:
+
 ```text
-┌──────────────────────────────┐        ┌──────────────────────────────────┐
-│  Frontend (React + Vite)     │  REST  │  Backend (FastAPI)               │
-│  - Library-first home        │ <────> │  - PaperStorage (SQLite + files) │
-│  - Report-first Workspace    │        │  - PDF parser (PyMuPDF)          │
-│  - Reliability badges        │        │  - ReportService                 │
-│  - Evidence Detail panel     │        │  - PaperAgent (DeepSeek client)  │
-│  - Focused Q&A               │        │  - Obsidian-native renderer     │
-└──────────────────────────────┘        └──────────────┬───────────────────┘
-                                                       │
-                                                       ▼
-                                         ┌──────────────────────────┐
-                                         │  Local Data (paperflow_data/)
-                                         │  - PDFs                  │
-                                         │  - report JSON           │
-                                         │  - Obsidian vault notes  │
-                                         │  - SQLite metadata       │
-                                         └──────────────────────────┘
+┌──────────────────────────────┐                ┌──────────────────────────────────┐
+│  Web Frontend (React + Vite) │                │  Backend (FastAPI)               │
+│  - Library-first home        │ ─── REST ───► │  - PaperStorage (SQLite + files) │
+│  - Report-first Workspace    │                │  - PDF parser (PyMuPDF)          │
+│  - Reliability badges        │                │  - ReportService                 │
+│  - Evidence Detail panel     │                │  - PaperAgent (DeepSeek client)  │
+│  - Focused Q&A               │                │  - Obsidian-native renderer      │
+└──────────────────────────────┘                └──────────────┬───────────────────┘
+                                                               │
+┌──────────────────────────────┐                               │
+│  TUI (Textual + httpx)       │ ─── REST ────────────────────►│
+│  - Same Library + Workspace  │                               │
+│  - R0/R1/R2 badges in terminal│                              │
+│  - Keyboard-driven           │                               │
+└──────────────────────────────┘                               ▼
+                                                 ┌──────────────────────────┐
+                                                 │  Local Data (paperflow_data/)
+                                                 │  - PDFs                  │
+                                                 │  - report JSON           │
+                                                 │  - Obsidian vault notes  │
+                                                 │  - SQLite metadata       │
+                                                 └──────────────────────────┘
 ```
 
-**Tech stack:** Python 3.9+ · FastAPI · Pydantic · PyMuPDF · httpx · pytest · React · TypeScript · Vite · Vitest · SQLite · DeepSeek API.
+The agent harness — PaperAgent + ReportService + DeepSeekClient — lives only in the backend, just like the `app-server` / `tui` separation in [DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI). Both the web frontend and the TUI are thin HTTP clients.
+
+**Tech stack:** Python 3.9+ · FastAPI · Pydantic · PyMuPDF · httpx · pytest · React · TypeScript · Vite · Vitest · Textual · Rich · SQLite · DeepSeek API.
 
 ---
 
@@ -133,7 +147,7 @@ cd paperflow/backend
 pytest -q
 ```
 
-### 3. Frontend
+### 3. Web Frontend
 
 ```bash
 cd paperflow/frontend
@@ -156,6 +170,48 @@ Open `http://localhost:5173` in your browser, then:
 4. Click any claim to see its evidence in the right panel.
 5. Ask a focused question — the answer is still graded R0 / R1 / R2.
 6. Click **Save Obsidian Note** to drop a Markdown file into the local vault.
+
+### 4. TUI (Terminal UI)
+
+If you prefer a keyboard-driven workflow, PaperFlow ships a Textual-based TUI
+that talks to the same backend.
+
+```bash
+# Install into the backend's venv (TUI shares httpx with the backend)
+cd paperflow/backend && . .venv/bin/activate
+pip install -e ../tui
+
+# Make sure the backend is running, then in another terminal:
+paperflow-tui
+# or
+PAPERFLOW_BASE_URL=http://127.0.0.1:8000 paperflow-tui
+# or
+python -m paperflow_tui
+```
+
+Keyboard bindings:
+
+| Where | Key | Action |
+| --- | --- | --- |
+| Library | `i` | Import a local PDF |
+| Library | `a` | Import an arXiv URL / ID |
+| Library | `o` / `Enter` | Open the selected paper's Workspace |
+| Library | `r` | Re-run the PaperAgent on a paper |
+| Library | `R` | Refresh library + agent status |
+| Library | `q` | Quit |
+| Workspace | `j` / `k` / `↑` / `↓` | Navigate claims in the Reading Report tree |
+| Workspace | `Enter` | Inspect a claim's evidence on the right panel |
+| Workspace | `a` | Ask a focused question — answer is graded R0 / R1 / R2 |
+| Workspace | `s` | Save / update the Obsidian note |
+| Workspace | `r` | Re-run agent for this paper |
+| Workspace | `b` / `Esc` | Back to Library |
+
+Run the TUI client tests (uses `respx` to mock the backend):
+
+```bash
+cd paperflow/tui
+pytest -q
+```
 
 ---
 
@@ -212,14 +268,18 @@ PaperFlow/
 ├── .gitignore
 └── paperflow/                           ← runnable V1.1 implementation
     ├── README.md
-    ├── backend/                         ← FastAPI + PaperAgent
+    ├── backend/                         ← FastAPI + PaperAgent harness
     │   ├── app/                         ← models, storage, report service, agent, obsidian
     │   ├── tests/                       ← pytest
     │   └── pyproject.toml
-    └── frontend/                        ← React + Vite + TypeScript
-        ├── src/                         ← App, API client, types, components
-        ├── public/
-        └── package.json
+    ├── frontend/                        ← React + Vite + TypeScript web client
+    │   ├── src/                         ← App, API client, types, components
+    │   ├── public/
+    │   └── package.json
+    └── tui/                             ← Textual + httpx terminal client
+        ├── paperflow_tui/               ← app, client, screens, styles.tcss
+        ├── tests/                       ← respx-mocked client tests
+        └── pyproject.toml
 ```
 
 User data (PDFs, generated reports, Obsidian vault) is stored under `paperflow/backend/paperflow_data/` and is git-ignored by default — your library never leaks into the repo.

@@ -1,0 +1,138 @@
+/* Paperflow TUI — Textual stylesheet */
+
+Screen {
+    background: $surface;
+}
+
+#header-bar {
+    dock: top;
+    height: 1;
+    background: $primary 30%;
+    color: $text;
+    padding: 0 1;
+}
+
+#status-bar {
+    dock: bottom;
+    height: 1;
+    background: $primary 10%;
+    color: $text-muted;
+    padding: 0 1;
+}
+
+DataTable {
+    height: 1fr;
+}
+
+DataTable > .datatable--header {
+    background: $primary 20%;
+    color: $text;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: $accent 30%;
+}
+
+.r0 {
+    color: $success;
+    text-style: bold;
+}
+
+.r1 {
+    color: $accent;
+    text-style: bold;
+}
+
+.r2 {
+    color: $warning;
+    text-style: bold;
+}
+
+.status-queued {
+    color: $text-muted;
+}
+
+.status-processing {
+    color: $warning;
+}
+
+.status-completed {
+    color: $success;
+}
+
+.status-failed {
+    color: $error;
+    text-style: bold;
+}
+
+/* Workspace layout: two columns. */
+#workspace-root {
+    height: 1fr;
+}
+
+#report-column {
+    width: 2fr;
+    border-right: heavy $primary 30%;
+    padding: 1 2;
+}
+
+#side-column {
+    width: 1fr;
+    padding: 1 2;
+}
+
+#report-tree {
+    height: 1fr;
+}
+
+#evidence-panel,
+#qa-panel {
+    height: auto;
+    border: round $primary 40%;
+    padding: 1;
+    margin-bottom: 1;
+}
+
+#qa-log {
+    height: 12;
+    border: round $accent 40%;
+    margin-bottom: 1;
+}
+
+#qa-input {
+    margin-bottom: 1;
+}
+
+.panel-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 1;
+}
+
+.dim {
+    color: $text-muted;
+}
+
+ModalScreen {
+    align: center middle;
+}
+
+#modal-box {
+    width: 70%;
+    max-width: 100;
+    background: $surface;
+    border: thick $primary;
+    padding: 1 2;
+}
+
+#modal-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 1;
+}
+
+#modal-hint {
+    color: $text-muted;
+    margin-bottom: 1;
+}
