@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -77,11 +77,16 @@ describe("Paperflow app", () => {
     expect(screen.getByText(/最近论文/i)).toBeInTheDocument();
     expect(screen.getByText(/处理状态/i)).toBeInTheDocument();
     expect(screen.getByText(/已保存报告/i)).toBeInTheDocument();
+    const savedReports = screen.getByRole("heading", { name: /已保存报告/i })
+      .parentElement as HTMLElement;
+    expect(within(savedReports).getByText("Paperflow")).toBeInTheDocument();
+    expect(within(savedReports).getByText("/vault/notes/Paperflow.md")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "Paperflow" })).toBeInTheDocument();
     expect(screen.queryByText(/已准备好自动执行/)).not.toBeInTheDocument();
     expect(screen.getByText(/1 篇论文，1 篇报告已完成/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /打开 paperflow/i })).toHaveTextContent(/^打开$/);
     expect(screen.getByRole("button", { name: /删除 paperflow/i })).toHaveTextContent(/^删除$/);
+    expect(screen.getByRole("button", { name: /删除 paperflow/i })).toHaveClass("btn-secondary");
   });
 
   it("deletes a paper after inline confirmation", async () => {
@@ -217,6 +222,43 @@ describe("Paperflow app", () => {
     expect(client.importPaper).toHaveBeenCalledTimes(1);
     expect(client.getStatus).toHaveBeenCalledWith("paper-2");
     expect(client.getReport).toHaveBeenCalledWith("paper-2");
+  });
+
+  it("shows explicit feedback while a PDF upload is in flight", async () => {
+    const user = userEvent.setup();
+    let resolveImport: (value: Awaited<ReturnType<PaperflowClient["importPaper"]>>) => void;
+    const queuedPaper: Paper = {
+      id: "paper-uploading",
+      title: "Uploading Paper",
+      pdf_path: "/vault/pdfs/Uploading Paper.pdf",
+      status: { stage: "queued", message: "Queued", progress: 0.05 },
+    };
+    const client = fakeClient({
+      importPaper: vi.fn().mockReturnValue(
+        new Promise((resolve) => {
+          resolveImport = resolve;
+        }),
+      ),
+      getStatus: vi.fn().mockReturnValue(new Promise(() => {})),
+      getReport: vi.fn(),
+    });
+
+    render(<App client={client} />);
+    await user.upload(
+      screen.getByLabelText(/导入 PDF/i),
+      new File(["paper"], "uploading.pdf", { type: "application/pdf" }),
+    );
+
+    expect(screen.getByText(/正在上传 PDF/)).toBeInTheDocument();
+
+    resolveImport!({
+      id: "session-uploading",
+      paper: queuedPaper,
+      status: queuedPaper.status!,
+      report: null,
+    });
+
+    expect(await screen.findByText(/已接收 Uploading Paper/)).toBeInTheDocument();
   });
 
   it("imports an arXiv link and opens the report after download completes", async () => {

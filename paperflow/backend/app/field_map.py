@@ -38,6 +38,7 @@ from app.models import (
     ReadingReport,
     ReliabilityLevel,
     TimelineEvent,
+    TimelineEventType,
 )
 from app.r1_clients import R1Candidate
 from app.r1_search import R1SearchResult
@@ -107,7 +108,7 @@ def build_field_map(
     research_opportunities = _research_opportunities(milestones, candidates)
     field_summary = _field_summary(seed_metadata, milestones, timeline)
     evidence_index = _evidence_index(milestones, timeline)
-    relationship_graph = _relationship_graph(seed_metadata, timeline)
+    relationship_graph = _relationship_graph(seed_metadata, timeline, candidates)
 
     return FieldMap(
         id=field_map_id or f"fm-{uuid.uuid4().hex[:12]}",
@@ -166,53 +167,56 @@ def _now_year() -> int:
 def _relationship_graph(
     seed_metadata: PaperMetadata,
     timeline: Sequence[TimelineEvent],
+    candidates: Sequence[R1Candidate],
     *,
     limit: int = 12,
 ) -> FieldMapRelationshipGraph:
-    """Build a compact predecessor → seed → successor graph from timeline events."""
+    """Build a compact predecessor → seed → successor graph from R1 direction.
+
+    Timeline order is not lineage. Predecessors come from papers the seed cites
+    (R1 references/backward lane); successors come from papers that cite the
+    seed (R1 citations/forward lane).
+    """
 
     seed_title = seed_metadata.title or "Seed paper"
     seed_year = seed_metadata.year
-    nodes: List[FieldMapGraphNode] = []
-    seen: set[str] = set()
-
-    def add_node(event: TimelineEvent, role: str) -> None:
-        node_id = event.id or f"node-{len(nodes)}"
-        if node_id in seen:
-            return
-        seen.add(node_id)
-        nodes.append(
-            FieldMapGraphNode(
-                id=node_id,
-                title=event.title,
-                role=role,
-                year=event.year,
-                event_type=event.event_type,
-                reliability=event.reliability,
-            )
-        )
-
-    seed_event = next((event for event in timeline if event.title == seed_title or event.id == "tl-seed"), None)
-    if seed_event is None:
-        seed_event = TimelineEvent(
+    timeline_by_title = {event.title.lower(): event for event in timeline}
+    nodes: List[FieldMapGraphNode] = [
+        FieldMapGraphNode(
             id="tl-seed",
             title=seed_title,
+            role="seed",
             year=seed_year,
             reliability=ReliabilityLevel.R0,
         )
+    ]
+    seen: set[str] = set()
+    seen.add("tl-seed")
 
-    for event in timeline[:limit]:
-        if event.id == seed_event.id or event.title == seed_title:
-            add_node(seed_event, "seed")
+    def add_candidate(candidate: R1Candidate, role: str) -> None:
+        node_id = _candidate_node_id(candidate, len(nodes))
+        if node_id in seen:
+            return
+        seen.add(node_id)
+        timeline_event = timeline_by_title.get(candidate.title.lower())
+        nodes.append(
+            FieldMapGraphNode(
+                id=node_id,
+                title=candidate.title,
+                role=role,
+                year=candidate.year,
+                event_type=timeline_event.event_type if timeline_event else TimelineEventType.OTHER,
+                reliability=timeline_event.reliability if timeline_event else ReliabilityLevel.R1,
+            )
+        )
+
+    for candidate in candidates:
+        if len(nodes) >= limit:
+            break
+        role = _candidate_graph_role(candidate)
+        if role is None:
             continue
-        if seed_year is not None and event.year is not None:
-            role = "predecessor" if event.year <= seed_year else "successor"
-        else:
-            role = "predecessor" if not any(node.role == "seed" for node in nodes) else "successor"
-        add_node(event, role)
-
-    if not any(node.role == "seed" for node in nodes):
-        add_node(seed_event, "seed")
+        add_candidate(candidate, role)
 
     seed_node = next((node for node in nodes if node.role == "seed"), None)
     edges: List[FieldMapGraphEdge] = []
@@ -234,6 +238,44 @@ def _relationship_graph(
             )
 
     return FieldMapRelationshipGraph(nodes=nodes, edges=edges)
+
+
+def _candidate_graph_role(candidate: R1Candidate) -> Optional[str]:
+    text = " ".join(filter(None, [candidate.source, candidate.relation])).lower()
+    successor_markers = (
+        "citation",
+        "citations",
+        "cited-by",
+        "cited_by",
+        "cited by",
+        "forward",
+        "follow-up",
+        "followup",
+    )
+    predecessor_markers = (
+        "reference",
+        "references",
+        "referenced",
+        "backward",
+        "foundation",
+        "prior",
+    )
+    if any(marker in text for marker in successor_markers):
+        return "successor"
+    if any(marker in text for marker in predecessor_markers):
+        return "predecessor"
+    return None
+
+
+def _candidate_node_id(candidate: R1Candidate, fallback_idx: int) -> str:
+    key = (
+        candidate.semantic_scholar_id
+        or candidate.arxiv_id
+        or candidate.doi
+        or re.sub(r"[^a-z0-9]+", "-", candidate.title.lower()).strip("-")
+        or f"candidate-{fallback_idx}"
+    )
+    return f"graph-{key}"[:80]
 
 
 def _surface_topics(

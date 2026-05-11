@@ -300,6 +300,22 @@ interface AppProps {
   client?: PaperflowClient;
 }
 
+type ImportActivityStage =
+  | "uploading"
+  | "downloading"
+  | "resolving"
+  | "queued"
+  | "processing"
+  | "slow"
+  | "completed"
+  | "failed";
+
+interface ImportActivity {
+  stage: ImportActivityStage;
+  title?: string;
+  message?: string;
+}
+
 export function App({
   initialPapers = [],
   initialReports = {},
@@ -317,6 +333,7 @@ export function App({
   const [urlInput, setUrlInput] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [importActivity, setImportActivity] = useState<ImportActivity | null>(null);
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
@@ -347,6 +364,10 @@ export function App({
 
   function acceptImportedSession(session: PaperSession) {
     setImportNotice(session.duplicate_warning ?? null);
+    setImportActivity({
+      stage: "queued",
+      title: session.paper.title,
+    });
     setPapers((current) => [
       session.paper,
       ...current.filter(
@@ -363,12 +384,14 @@ export function App({
   async function handleImport(file: File) {
     setError(null);
     setStatus(UI_TEXT.en.queuedStatus);
+    setImportActivity({ stage: "uploading", title: file.name });
     try {
       const session = await client.importPaper(file);
       acceptImportedSession(session);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.importFailed);
       setStatus(UI_TEXT.en.importFailed);
+      setImportActivity({ stage: "failed", title: file.name });
     }
   }
 
@@ -380,6 +403,7 @@ export function App({
     }
     setError(null);
     setStatus(UI_TEXT.en.arxivQueuedStatus);
+    setImportActivity({ stage: "downloading", title: value });
     try {
       const session = await client.importArxiv(value);
       acceptImportedSession(session);
@@ -387,6 +411,7 @@ export function App({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.importFailed);
       setStatus(UI_TEXT.en.importFailed);
+      setImportActivity({ stage: "failed", title: value });
     }
   }
 
@@ -398,6 +423,7 @@ export function App({
     }
     setError(null);
     setStatus(UI_TEXT.en.urlQueuedStatus);
+    setImportActivity({ stage: "resolving", title: value });
     try {
       const session = await client.importUrl(value);
       acceptImportedSession(session);
@@ -405,24 +431,35 @@ export function App({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.importFailed);
       setStatus(UI_TEXT.en.importFailed);
+      setImportActivity({ stage: "failed", title: value });
     }
   }
 
   async function handleZoteroImport() {
     setError(null);
+    setImportActivity({ stage: "resolving", title: "Zotero" });
     try {
       const result = await client.importZotero();
       if (result.imported === 0) {
         setStatus(UI_TEXT.en.zoteroEmpty);
+        setImportActivity(null);
         return;
       }
       setStatus(UI_TEXT.en.zoteroImported(result.imported));
+      setImportActivity({
+        stage: "queued",
+        message:
+          locale === "zh"
+            ? `已从 Zotero 接收 ${result.imported} 篇论文，正在解析。`
+            : `Received ${result.imported} Zotero paper(s), parsing now.`,
+      });
       await refreshLibrary();
       result.sessions.forEach((session) => {
         void pollPaper(session.paper.id);
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.importFailed);
+      setImportActivity({ stage: "failed", title: "Zotero" });
     }
   }
 
@@ -471,16 +508,37 @@ export function App({
       const nextStatus = await client.getStatus(paperId);
       updatePaperStatus(paperId, nextStatus);
       setStatus(nextStatus.message);
+      if (attempt === 0) {
+        setImportActivity((current) =>
+          current?.title
+            ? { ...current, stage: "processing", title: current.title }
+            : current,
+        );
+      }
+      if (attempt === 20) {
+        setImportActivity((current) =>
+          current?.title ? { ...current, stage: "slow", title: current.title } : current,
+        );
+      }
       if (nextStatus.stage === "completed") {
         const report = await client.getReport(paperId);
         setReports((current) => ({ ...current, [paperId]: report }));
         if (report.paper_title) {
           updatePaperTitle(paperId, report.paper_title);
         }
+        setImportActivity({
+          stage: "completed",
+          title: report.paper_title ?? papers.find((paper) => paper.id === paperId)?.title,
+        });
         return;
       }
       if (nextStatus.stage === "failed") {
         setError(nextStatus.message);
+        setImportActivity({
+          stage: "failed",
+          title: papers.find((paper) => paper.id === paperId)?.title,
+          message: nextStatus.message,
+        });
         return;
       }
       await sleep(1500);
@@ -539,6 +597,7 @@ export function App({
         onBack={() => setSelectedPaper(null)}
         locale={locale}
         agentStatus={agentStatus}
+        importActivity={importActivity}
         importNotice={importNotice}
         onLocaleToggle={() => setLocale(locale === "zh" ? "en" : "zh")}
         onNoteSaved={(notePath) => updatePaperNote(selectedPaper.id, notePath)}
@@ -646,6 +705,7 @@ export function App({
 
       {error ? <p className="warning-line">{error}</p> : null}
       {importNotice ? <p className="notice-line">{importNotice}</p> : null}
+      <ImportActivityBanner activity={importActivity} locale={locale} />
 
       <section className="paper-section" id="papers">
         <div className="paper-section-head">
@@ -669,6 +729,7 @@ export function App({
                   <h3 className="paper-title">{paper.title}</h3>
                   <PaperMetadataLine paper={paper} />
                   <p className="paper-path">{paper.pdf_path}</p>
+                  <PaperProcessingLine locale={locale} paper={paper} />
                   {paper.note_path ? (
                     <p className="paper-note-line">
                       {text.notePrefix} <span className="mono">{paper.note_path}</span>
@@ -679,7 +740,7 @@ export function App({
                   <StatusBadge locale={locale} status={paper.status} />
                   <button
                     type="button"
-                    className={`btn-link ${pendingDeleteId === paper.id ? "is-danger" : ""}`}
+                    className={`btn-secondary ${pendingDeleteId === paper.id ? "is-danger" : ""}`}
                     aria-label={
                       pendingDeleteId === paper.id
                         ? text.confirmDeletePaper(paper.title)
@@ -722,7 +783,10 @@ export function App({
                   key={paper.id}
                   className={paper.note_path ? "" : "empty"}
                 >
-                  {paper.note_path ?? text.noNote}
+                  <span className="saved-report-title">{paper.title}</span>
+                  <span className="saved-report-path">
+                    {paper.note_path ?? text.noNote}
+                  </span>
                 </li>
               ))
             )}
@@ -798,6 +862,7 @@ function Workspace({
   client,
   locale,
   agentStatus,
+  importActivity,
   importNotice,
   onLocaleToggle,
   onNoteSaved,
@@ -809,6 +874,7 @@ function Workspace({
   client: PaperflowClient;
   locale: Locale;
   agentStatus: AgentStatus | null;
+  importActivity: ImportActivity | null;
   importNotice?: string | null;
   onLocaleToggle: () => void;
   onNoteSaved: (notePath: string) => void;
@@ -929,6 +995,7 @@ function Workspace({
         />
         <section className="workspace-main">
           {importNotice ? <p className="notice-line">{importNotice}</p> : null}
+          <ImportActivityBanner activity={importActivity} locale={locale} />
           <div className="empty-report">
             <h2 className="eyebrow">{text.readingReport}</h2>
             <h1>{displayTitle}</h1>
@@ -970,6 +1037,7 @@ function Workspace({
       />
       <section className="workspace-main">
         {importNotice ? <p className="notice-line">{importNotice}</p> : null}
+        <ImportActivityBanner activity={importActivity} locale={locale} />
 
         <header className="report-head" id="report">
           <h2 className="eyebrow">{text.readingReport}</h2>
@@ -1117,6 +1185,52 @@ function Workspace({
 /* ============================================================================
    Pieces
    ============================================================================ */
+
+function ImportActivityBanner({
+  activity,
+  locale,
+}: {
+  activity: ImportActivity | null;
+  locale: Locale;
+}) {
+  if (!activity) {
+    return null;
+  }
+  const message = importActivityMessage(activity, locale);
+  return (
+    <section className={`import-activity is-${activity.stage}`} aria-live="polite">
+      <div>
+        <p className="label-section">
+          {locale === "zh" ? "处理反馈" : "Processing Feedback"}
+        </p>
+        <p className="import-activity-message">{message}</p>
+      </div>
+      <span className="import-activity-pulse" aria-hidden="true" />
+    </section>
+  );
+}
+
+function PaperProcessingLine({
+  paper,
+  locale,
+}: {
+  paper: Paper;
+  locale: Locale;
+}) {
+  if (!paper.status || paper.status.stage === "completed") {
+    return null;
+  }
+  const progress = Math.max(0, Math.min(100, Math.round((paper.status.progress ?? 0) * 100)));
+  return (
+    <div className="paper-processing-line">
+      <span>{localizeTaskMessage(paper.status.message, locale)}</span>
+      <span className="mono">{progress}%</span>
+      <span className="paper-progress-track" aria-hidden="true">
+        <span style={{ width: `${progress}%` }} />
+      </span>
+    </div>
+  );
+}
 
 function ClaimItem({
   claim,
@@ -1902,6 +2016,51 @@ function buildLibraryStatus(papers: Paper[], status: string, locale: Locale) {
   return `${papers.length} paper${papers.length === 1 ? "" : "s"}, ${completed} report${
     completed === 1 ? "" : "s"
   } completed${activePart}${failedPart}.`;
+}
+
+function importActivityMessage(activity: ImportActivity, locale: Locale) {
+  const title = activity.title?.trim();
+  if (activity.message) {
+    return activity.message;
+  }
+  if (locale === "zh") {
+    switch (activity.stage) {
+      case "uploading":
+        return "正在上传 PDF。上传成功后会自动加入 Agent 解析队列。";
+      case "downloading":
+        return `正在下载 ${title || "arXiv PDF"}，下载完成后会开始解析。`;
+      case "resolving":
+        return `正在解析 ${title || "导入来源"}，稍后会创建论文条目。`;
+      case "queued":
+        return `已接收 ${title || "论文"}，Agent 正在解析。`;
+      case "processing":
+        return `${title || "论文"} 正在解析，阅读报告生成后会自动打开。`;
+      case "slow":
+        return `${title || "论文"} 仍在解析。PDF 较长或模型响应慢时会多等一会，不代表卡住。`;
+      case "completed":
+        return `${title || "论文"} 阅读报告已生成。`;
+      case "failed":
+        return `${title || "论文"} 处理失败，请查看错误信息。`;
+    }
+  }
+  switch (activity.stage) {
+    case "uploading":
+      return "Uploading PDF. It will enter the Agent queue after upload succeeds.";
+    case "downloading":
+      return `Downloading ${title || "arXiv PDF"}; parsing starts after download.`;
+    case "resolving":
+      return `Resolving ${title || "import source"} and creating a paper entry.`;
+    case "queued":
+      return `Received ${title || "paper"}; the Agent is parsing it.`;
+    case "processing":
+      return `${title || "Paper"} is being parsed. The report opens automatically when ready.`;
+    case "slow":
+      return `${title || "Paper"} is still parsing. Long PDFs or slow model responses can take longer; this does not mean it is stuck.`;
+    case "completed":
+      return `${title || "Paper"} reading report is ready.`;
+    case "failed":
+      return `${title || "Paper"} failed. Check the error details.`;
+  }
 }
 
 function sleep(ms: number) {

@@ -54,7 +54,10 @@ export interface PaperflowClient {
   getAgentStatus(): Promise<AgentStatus>;
 }
 
-export function createPaperflowClient(baseUrl = "http://127.0.0.1:8000"): PaperflowClient {
+const defaultBaseUrl =
+  import.meta.env.VITE_PAPERFLOW_API_BASE_URL || "http://127.0.0.1:8000";
+
+export function createPaperflowClient(baseUrl = defaultBaseUrl): PaperflowClient {
   return {
     async listPapers() {
       return request<Paper[]>(`${baseUrl}/api/papers`);

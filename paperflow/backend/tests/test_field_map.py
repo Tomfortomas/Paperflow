@@ -208,6 +208,49 @@ def test_build_field_map_aggregates_topics_milestones_open_problems() -> None:
     assert any(edge.relation == "precedes" for edge in fm.relationship_graph.edges)
 
 
+def test_field_map_relationship_graph_uses_citation_direction_not_year() -> None:
+    seed_metadata = PaperMetadata(
+        title="Seed Method",
+        year=2024,
+        source_type=ImportSourceType.ARXIV,
+    )
+    candidates = [
+        R1Candidate(
+            title="Future Benchmark That Does Not Cite Seed",
+            source="paperswithcode:benchmark",
+            relation="benchmark-only",
+            year=2025,
+            citation_count=10,
+        ),
+        R1Candidate(
+            title="Later Paper That Cites Seed",
+            source="semanticscholar:citations",
+            relation="cited-by",
+            year=2025,
+            citation_count=20,
+        ),
+        R1Candidate(
+            title="Newer Reference Used By Seed",
+            source="semanticscholar:references",
+            relation="referenced-by-seed",
+            year=2025,
+            citation_count=30,
+        ),
+    ]
+    fm = build_field_map(
+        seed_paper_id="seed-1",
+        seed_metadata=seed_metadata,
+        search_result=R1SearchResult(items=[]),
+        raw_candidates=candidates,
+    )
+
+    roles = {node.title: node.role for node in fm.relationship_graph.nodes}
+
+    assert roles["Later Paper That Cites Seed"] == "successor"
+    assert roles["Newer Reference Used By Seed"] == "predecessor"
+    assert "Future Benchmark That Does Not Cite Seed" not in roles
+
+
 # ------------------------------------------------------------ API
 
 

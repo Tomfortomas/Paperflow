@@ -237,6 +237,7 @@ button {
 }
 
 .btn-primary,
+.btn-secondary,
 .btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -264,6 +265,26 @@ button {
   border-color: var(--ink-2);
 }
 .btn-primary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn-secondary {
+  color: var(--ink-2);
+  border: 1px solid var(--rule-strong);
+  background: transparent;
+}
+.btn-secondary:hover:not(:disabled) {
+  color: var(--ink-1);
+  border-color: var(--ink-2);
+  background: var(--paper-2);
+}
+.btn-secondary.is-danger {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.btn-secondary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -312,6 +333,7 @@ button {
 }
 
 .btn-primary:disabled,
+.btn-secondary:disabled,
 .btn-ghost:disabled,
 .btn-link:disabled {
   color: var(--ink-5);
@@ -693,7 +715,7 @@ input[type="file"]::file-selector-button:hover {
 
 .import-drawer {
   margin-top: var(--space-6);
-  padding-top: var(--space-5);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--rule);
 }
 
@@ -702,13 +724,15 @@ input[type="file"]::file-selector-button:hover {
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--rule);
 }
 
 .import-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-5) var(--space-6);
+  gap: var(--space-6);
 }
 @media (min-width: 880px) {
   .import-grid {
@@ -720,8 +744,7 @@ input[type="file"]::file-selector-button:hover {
   display: grid;
   grid-template-rows: auto auto auto;
   gap: var(--space-3);
-  padding: var(--space-4) 0 0;
-  border-top: 1px solid var(--rule);
+  padding: 0;
 }
 .import-field-title {
   font-family: var(--font-sans);
@@ -750,8 +773,8 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .import-field-pdf input[type="file"] {
-  border-bottom: 1px solid var(--rule);
-  padding-bottom: var(--space-2);
+  border-bottom: 0;
+  padding-bottom: 0;
 }
 @media (max-width: 620px) {
   .import-field .import-row {
@@ -856,15 +879,19 @@ input[type="file"]::file-selector-button:hover {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-2);
   grid-column: 2;
   justify-content: flex-start;
 }
 .paper-actions .btn-primary,
-.paper-actions .btn-link {
-  max-width: min(100%, 26rem);
+.paper-actions .btn-secondary {
+  min-width: 5.1rem;
+  padding-inline: 1.15rem;
   white-space: normal;
   text-align: center;
+}
+.paper-actions .btn-primary {
+  min-width: 5.1rem;
 }
 
 .paper-list-empty {
@@ -903,18 +930,49 @@ input[type="file"]::file-selector-button:hover {
 .saved-reports-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 .saved-reports-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: baseline;
+  gap: var(--space-3);
   font-family: var(--font-mono);
   font-size: var(--t-micro);
   color: var(--ink-3);
   word-break: break-all;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--rule);
+}
+.saved-reports-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
 }
 .saved-reports-list li.empty {
+  color: var(--ink-4);
+}
+.saved-report-title {
+  color: var(--ink-2);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.25;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+.saved-report-path {
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  line-height: 1.45;
+}
+.saved-reports-list li.empty .saved-report-path {
   font-family: var(--font-serif);
   font-style: italic;
-  color: var(--ink-4);
+}
+@media (max-width: 620px) {
+  .saved-reports-list li {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .warning-line {
@@ -935,6 +993,77 @@ input[type="file"]::file-selector-button:hover {
   border-radius: var(--radius);
   font-family: var(--font-sans);
   font-size: var(--t-ui);
+}
+
+.import-activity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+}
+.import-activity .label-section {
+  margin-bottom: var(--space-1);
+  font-size: 11px;
+}
+.import-activity-message {
+  color: var(--ink-2);
+  font-size: var(--t-ui);
+  line-height: 1.45;
+}
+.import-activity.is-failed {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.import-activity.is-completed {
+  background: var(--r0-bg);
+  border-color: oklch(0.82 0.04 150);
+}
+.import-activity-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--r1-ink);
+  box-shadow: 0 0 0 0 oklch(0.38 0.09 240 / 0.28);
+  animation: pulse-ring 1.8s var(--ease-out-quart) infinite;
+}
+.import-activity.is-completed .import-activity-pulse {
+  background: var(--r0-ink);
+  animation: none;
+}
+.import-activity.is-failed .import-activity-pulse {
+  background: var(--accent-strong);
+  animation: none;
+}
+
+.paper-processing-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: var(--t-ui);
+  line-height: 1.35;
+}
+.paper-progress-track {
+  grid-column: 1 / -1;
+  height: 3px;
+  overflow: hidden;
+  background: var(--paper-4);
+  border-radius: 999px;
+}
+.paper-progress-track span {
+  display: block;
+  height: 100%;
+  min-width: 8px;
+  background: var(--r1-ink);
+  transition: width var(--dur-2) var(--ease-out-quart);
 }
 
 /* ============================================================================
@@ -1879,5 +2008,17 @@ input[type="file"]::file-selector-button:hover {
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 oklch(0.38 0.09 240 / 0.26);
+  }
+  70% {
+    box-shadow: 0 0 0 8px oklch(0.38 0.09 240 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 oklch(0.38 0.09 240 / 0);
   }
 }
