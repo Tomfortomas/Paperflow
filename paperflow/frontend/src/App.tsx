@@ -1,7 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { createPaperflowClient, type PaperflowClient } from "./api";
-import type { AgentStatus, Claim, Paper, ReadingReport, TaskStatus } from "./types";
+import { PdfViewer, type PdfBboxHighlight } from "./PdfViewer";
+import type {
+  AgentStatus,
+  Claim,
+  Evidence,
+  Paper,
+  ReadingReport,
+  TaskStatus,
+} from "./types";
 import "./styles.css";
 
 const defaultClient = createPaperflowClient();
@@ -63,6 +71,15 @@ const UI_TEXT = {
     saveNote: "保存 / 更新 Obsidian 笔记",
     savedTo: (path: string) => `已保存到 ${path}`,
     page: (page: number) => ` 第 ${page} 页`,
+    pdfPanel: "PDF 阅读",
+    selectionAsk: "针对选区追问",
+    selectionPlaceholder: "在 PDF 中选中文本，再点这里追问。",
+    enableViewer: "打开 PDF 阅读器",
+    disableViewer: "关闭 PDF 阅读器",
+    locationExact: "证据已精确定位",
+    locationPageQuote: "已定位到页 + 段落",
+    locationQuoteOnly: "无法在 PDF 中定位",
+    locationMissing: "缺少证据原文",
     statusLabels: {
       queued: "排队中",
       processing: "解析中",
@@ -147,6 +164,15 @@ const UI_TEXT = {
     saveNote: "Save / Update Obsidian Note",
     savedTo: (path: string) => `Saved to ${path}`,
     page: (page: number) => ` p. ${page}`,
+    pdfPanel: "PDF Viewer",
+    selectionAsk: "Ask about selection",
+    selectionPlaceholder: "Select text in the PDF, then click to ask.",
+    enableViewer: "Open PDF viewer",
+    disableViewer: "Close PDF viewer",
+    locationExact: "Located precisely in PDF",
+    locationPageQuote: "Located by page + paragraph",
+    locationQuoteOnly: "Could not locate in PDF",
+    locationMissing: "Missing evidence quote",
     statusLabels: {
       queued: "queued",
       processing: "processing",
@@ -517,6 +543,11 @@ function Workspace({
   const [answer, setAnswer] = useState<Claim | null>(null);
   const [notePath, setNotePath] = useState<string | null>(paper.note_path ?? null);
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(report?.summary[0] ?? null);
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  const [pdfPage, setPdfPage] = useState(1);
+
+  const isReportReady = paper.status?.stage === "completed";
+  const pdfUrl = useMemo(() => client.pdfUrl(paper.id), [client, paper.id]);
 
   useEffect(() => {
     if (!selectedClaim && report?.summary[0]) {
@@ -524,12 +555,36 @@ function Workspace({
     }
   }, [report, selectedClaim]);
 
+  // Jump the PDF viewer to the first evidence page when the user picks a claim.
+  useEffect(() => {
+    const firstEvidence = selectedClaim?.evidence?.[0];
+    if (firstEvidence?.page) {
+      setPdfPage(firstEvidence.page);
+    }
+  }, [selectedClaim]);
+
+  const highlight: PdfBboxHighlight | null = (() => {
+    const first = selectedClaim?.evidence?.[0];
+    if (!first?.page || !first.bbox) return null;
+    return { page: first.page, bbox: first.bbox };
+  })();
+
   async function askFocusedQuestion() {
     if (!question.trim()) {
       return;
     }
     const result = await client.askPaper(paper.id, question);
     setAnswer(result);
+  }
+
+  async function askSelection(quote: string, page: number) {
+    if (!quote.trim()) return;
+    try {
+      const result = await client.askSelection(paper.id, { quote, page });
+      setAnswer(result);
+    } catch {
+      // Backend may not yet be running; swallow silently to keep UX calm.
+    }
   }
 
   async function exportNote() {
@@ -579,7 +634,28 @@ function Workspace({
             <p className="muted">{paper.pdf_path}</p>
           </div>
           <StatusBadge locale={locale} status={paper.status} />
+          {isReportReady ? (
+            <button
+              type="button"
+              className="pdf-toggle"
+              onClick={() => setPdfViewerOpen((v) => !v)}
+            >
+              {pdfViewerOpen ? text.disableViewer : text.enableViewer}
+            </button>
+          ) : null}
         </div>
+
+        {pdfViewerOpen && isReportReady ? (
+          <section className="pdf-viewer-shell">
+            <PdfViewer
+              pdfUrl={pdfUrl}
+              page={pdfPage}
+              highlight={highlight}
+              onPageChange={setPdfPage}
+              onSelection={(quote, page) => void askSelection(quote, page)}
+            />
+          </section>
+        ) : null}
 
         <h3>{text.executiveSummary}</h3>
         {report.summary.map((claim) => (
@@ -713,6 +789,7 @@ function SidePanel({
                     {evidence.page ? <span>{text.page(evidence.page)}</span> : null}
                     {evidence.section ? <span> · {evidence.section}</span> : null}
                     <p>{evidence.quote}</p>
+                    <LocationStatusBadge evidence={evidence} locale={locale} />
                   </blockquote>
                 ))}
               </div>
@@ -753,6 +830,18 @@ function StatusBadge({ status, locale }: { status?: TaskStatus; locale: Locale }
   const stage = status?.stage ?? "unknown";
   const text = UI_TEXT[locale];
   return <span className={`status-badge ${stage}`}>{text.statusLabels[stage as keyof typeof text.statusLabels] ?? stage}</span>;
+}
+
+function LocationStatusBadge({ evidence, locale }: { evidence: Evidence; locale: Locale }) {
+  const text = UI_TEXT[locale];
+  const status = evidence.location_status ?? (evidence.page ? "page_and_quote" : "quote_only");
+  const labels: Record<string, string> = {
+    exact: text.locationExact,
+    page_and_quote: text.locationPageQuote,
+    quote_only: text.locationQuoteOnly,
+    missing: text.locationMissing,
+  };
+  return <span className={`location-badge location-${status}`}>{labels[status] ?? status}</span>;
 }
 
 function PaperMetadataChips({ paper }: { paper: Paper }) {

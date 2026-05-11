@@ -297,3 +297,92 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+.location-badge {
+  display: inline-block;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  margin-top: 0.4rem;
+  padding: 0.1rem 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.location-badge.location-exact {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.location-badge.location-page_and_quote {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.location-badge.location-quote_only {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.location-badge.location-missing {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.pdf-toggle {
+  align-self: flex-start;
+  background: #8a5a44;
+}
+
+.pdf-viewer-shell {
+  background: #fffaf0;
+  border: 1px solid #d6c7ad;
+  border-radius: 18px;
+  margin-top: 1rem;
+  padding: 0.5rem;
+}
+
+.pdf-viewer-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+
+.pdf-viewer-page-indicator {
+  font-variant-numeric: tabular-nums;
+}
+
+.pdf-viewer-canvas-wrap {
+  position: relative;
+  display: inline-block;
+  margin: 0 auto;
+  user-select: text;
+}
+
+.pdf-viewer-canvas {
+  display: block;
+  background: white;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.pdf-viewer-text-layer {
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  font-family: sans-serif;
+  line-height: 1;
+  user-select: text;
+  pointer-events: auto;
+}
+
+.pdf-viewer-text-layer ::selection {
+  background: rgba(255, 196, 89, 0.45);
+}
+
+.pdf-viewer-highlight {
+  position: absolute;
+  background: rgba(255, 213, 102, 0.35);
+  border: 2px solid #d97706;
+  border-radius: 4px;
+  pointer-events: none;
+}

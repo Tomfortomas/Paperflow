@@ -1,11 +1,19 @@
 export type ReliabilityLevel = "R0" | "R1" | "R2";
 
+export type EvidenceLocationStatus =
+  | "exact"
+  | "page_and_quote"
+  | "quote_only"
+  | "missing";
+
 export interface Evidence {
   id: string;
   source: string;
   page?: number;
   section?: string;
   quote: string;
+  bbox?: [number, number, number, number] | null;
+  location_status?: EvidenceLocationStatus;
 }
 
 export interface Claim {
@@ -91,6 +99,18 @@ export interface ZoteroPreviewItem {
 export interface ZoteroImportResult {
   imported: number;
   sessions: PaperSession[];
+}
+
+export interface PdfChunk {
+  page: number;
+  bbox: [number, number, number, number];
+  text: string;
+  section_guess?: string | null;
+}
+
+export interface ParsedPdfPayload {
+  chunks: PdfChunk[];
+  page_sizes: number[][];
 }
 
 export interface PaperSession {

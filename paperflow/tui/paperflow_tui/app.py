@@ -68,6 +68,14 @@ def stage_badge(stage: str) -> Text:
     return Text(stage, style=style)
 
 
+_LOCATION_LABEL = {
+    "exact": "located precisely",
+    "page_and_quote": "located by page + paragraph",
+    "quote_only": "no PDF location",
+    "missing": "missing evidence",
+}
+
+
 def evidence_lines(evidence: List[Dict[str, Any]]) -> List[str]:
     out: List[str] = []
     for ev in evidence:
@@ -78,6 +86,13 @@ def evidence_lines(evidence: List[Dict[str, Any]]) -> List[str]:
             bits.append(str(ev["section"]))
         if ev.get("source"):
             bits.append(str(ev["source"]))
+        bbox = ev.get("bbox")
+        if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+            x0, y0, x1, y1 = bbox
+            bits.append(f"bbox=({x0:.0f},{y0:.0f})-({x1:.0f},{y1:.0f})")
+        location = ev.get("location_status")
+        if location:
+            bits.append(_LOCATION_LABEL.get(location, location))
         header = " · ".join(bits) if bits else "evidence"
         out.append(f"[{header}]")
         quote = (ev.get("quote") or "").strip()
@@ -430,6 +445,7 @@ class WorkspaceScreen(Screen):
     BINDINGS = [
         Binding("b,escape", "back", "Back", show=True),
         Binding("a", "ask", "Ask", show=True),
+        Binding("c", "copy_quote", "Copy quote", show=True),
         Binding("s", "save_obsidian", "Save Obsidian", show=True),
         Binding("r", "rerun", "Rerun Agent", show=True),
         Binding("R", "refresh", "Refresh", show=True),
@@ -440,6 +456,7 @@ class WorkspaceScreen(Screen):
         self.paper = paper
         self.report: Optional[Dict[str, Any]] = None
         self._claim_index: Dict[int, Tuple[str, Dict[str, Any]]] = {}
+        self._selected_claim: Optional[Dict[str, Any]] = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -575,8 +592,10 @@ class WorkspaceScreen(Screen):
         panel = self.query_one("#evidence-panel", Static)
         if not entry:
             panel.update("No claim selected.")
+            self._selected_claim = None
             return
         section_title, claim = entry
+        self._selected_claim = claim
         body = self._render_claim_detail(section_title, claim)
         panel.update(body)
 
@@ -650,6 +669,26 @@ class WorkspaceScreen(Screen):
 
     async def action_refresh(self) -> None:
         await self.load_report()
+
+    def action_copy_quote(self) -> None:
+        """Copy the selected claim's first evidence quote to the OS clipboard."""
+
+        claim = self._selected_claim
+        if not claim:
+            self._set_status(Text("Select a claim first to copy its quote.", style="yellow"))
+            return
+        evidence = (claim.get("evidence") or [None])[0]
+        quote = (evidence or {}).get("quote") if evidence else None
+        if not quote:
+            self._set_status(Text("No evidence quote available for that claim.", style="yellow"))
+            return
+        try:
+            self.app.copy_to_clipboard(quote)
+        except Exception as exc:  # pragma: no cover — depends on host clipboard
+            self._set_status(Text(f"Clipboard copy failed: {exc}", style="bold red"))
+            return
+        preview = quote[:60] + ("…" if len(quote) > 60 else "")
+        self._set_status(Text(f"Copied quote → \"{preview}\"", style="green"))
 
 
 # --------------------------------------------------------------------- App

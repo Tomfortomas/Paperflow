@@ -41,11 +41,16 @@ class PaperStorage:
         self.pdf_dir = root / "pdfs"
         self.note_dir = root / "notes"
         self.report_dir = root / "reports"
+        self.chunk_dir = root / "chunks"  # Phase 1: cached PDF parse output
         self.db_path = root / "paperflow.sqlite3"
         self.pdf_dir.mkdir(parents=True, exist_ok=True)
         self.note_dir.mkdir(parents=True, exist_ok=True)
         self.report_dir.mkdir(parents=True, exist_ok=True)
+        self.chunk_dir.mkdir(parents=True, exist_ok=True)
         self._init_db()
+
+    def chunks_path(self, paper_id: str) -> Path:
+        return self.chunk_dir / f"{paper_id}.json"
 
     # --------------------------------------------------------------- create
 

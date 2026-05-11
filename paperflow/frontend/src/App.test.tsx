@@ -103,6 +103,17 @@ describe("Paperflow app", () => {
     await user.click(screen.getAllByRole("button", { name: /查看 1 条证据/i })[0]);
 
     expect(screen.getByText("paper reading IDE")).toBeInTheDocument();
+    // Phase 1: evidence carries a location-status badge.
+    expect(screen.getByText(/已定位到页 \+ 段落/)).toBeInTheDocument();
+  });
+
+  it("offers a PDF viewer toggle once the report is ready", async () => {
+    const user = userEvent.setup();
+    render(<App initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+
+    expect(screen.getByRole("button", { name: /打开 PDF 阅读器/i })).toBeInTheDocument();
   });
 
   it("imports a PDF without blocking and opens the report after status polling completes", async () => {
@@ -185,6 +196,9 @@ function fakeClient(overrides: Partial<PaperflowClient> = {}): PaperflowClient {
     getStatus: vi.fn(),
     getReport: vi.fn(),
     askPaper: vi.fn(),
+    askSelection: vi.fn(),
+    getChunks: vi.fn().mockResolvedValue({ chunks: [], page_sizes: [] }),
+    pdfUrl: vi.fn().mockReturnValue("http://127.0.0.1:8000/api/papers/paper-1/pdf"),
     exportObsidian: vi.fn(),
     rerunAgent: vi.fn(),
     getAgentStatus: vi.fn().mockResolvedValue({ configured: true, mode: "injected", model: null }),

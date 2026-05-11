@@ -2,12 +2,20 @@ import type {
   AgentStatus,
   Claim,
   Paper,
+  ParsedPdfPayload,
   PaperSession,
   ReadingReport,
   TaskStatus,
   ZoteroImportResult,
   ZoteroPreviewItem,
 } from "./types";
+
+export interface AskSelectionPayload {
+  quote: string;
+  page?: number | null;
+  section?: string | null;
+  question?: string | null;
+}
 
 export interface PaperflowClient {
   listPapers(): Promise<Paper[]>;
@@ -19,6 +27,9 @@ export interface PaperflowClient {
   getStatus(paperId: string): Promise<TaskStatus>;
   getReport(paperId: string): Promise<ReadingReport>;
   askPaper(paperId: string, question: string): Promise<Claim>;
+  askSelection(paperId: string, payload: AskSelectionPayload): Promise<Claim>;
+  getChunks(paperId: string): Promise<ParsedPdfPayload>;
+  pdfUrl(paperId: string): string;
   exportObsidian(paperId: string): Promise<{ note_path: string }>;
   rerunAgent(paperId: string): Promise<PaperSession>;
   getAgentStatus(): Promise<AgentStatus>;
@@ -77,6 +88,19 @@ export function createPaperflowClient(baseUrl = "http://127.0.0.1:8000"): Paperf
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question }),
       });
+    },
+    async askSelection(paperId: string, payload: AskSelectionPayload) {
+      return request<Claim>(`${baseUrl}/api/papers/${paperId}/ask-selection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    },
+    async getChunks(paperId: string) {
+      return request<ParsedPdfPayload>(`${baseUrl}/api/papers/${paperId}/chunks`);
+    },
+    pdfUrl(paperId: string) {
+      return `${baseUrl}/api/papers/${paperId}/pdf`;
     },
     async exportObsidian(paperId: string) {
       return request<{ note_path: string }>(`${baseUrl}/api/papers/${paperId}/export-obsidian`, {

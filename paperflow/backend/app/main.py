@@ -9,9 +9,11 @@ from typing import Dict, List, Optional
 import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.deepseek import DeepSeekClient
+from app.evidence_verifier import EvidenceVerifier
 from app.metadata import (
     MetadataError,
     classify_url,
@@ -20,6 +22,8 @@ from app.metadata import (
 )
 from app.models import (
     Claim,
+    Evidence,
+    EvidenceLocationStatus,
     ImportSourceType,
     PaperMetadata,
     PaperSession,
@@ -28,6 +32,7 @@ from app.models import (
     TaskStatus,
 )
 from app.obsidian import render_obsidian_note
+from app.pdf_parser import load_chunks, parse_pdf, save_chunks
 from app.report_service import ReportService
 from app.storage import PaperStorage
 from app.zotero import ZoteroError, ZoteroReader
@@ -35,6 +40,13 @@ from app.zotero import ZoteroError, ZoteroReader
 
 class AskRequest(BaseModel):
     question: str
+
+
+class AskSelectionRequest(BaseModel):
+    quote: str
+    page: Optional[int] = None
+    section: Optional[str] = None
+    question: Optional[str] = None
 
 
 class ArxivImportRequest(BaseModel):
@@ -95,6 +107,17 @@ def create_app(
                 TaskStatus(stage="failed", message=str(exc), progress=1.0),
             )
             return
+
+        # Persist parsed chunks alongside the report so the viewer (and any
+        # later rerun) can highlight evidence without re-parsing the PDF.
+        parsed = report_service.parsed_pdf() if hasattr(report_service, "parsed_pdf") else None
+        if parsed is None:
+            try:
+                parsed = parse_pdf(session.paper.pdf_path)
+            except Exception:
+                parsed = None
+        if parsed is not None and parsed.chunks:
+            save_chunks(storage.chunks_path(session.paper.id), parsed)
 
         reports[session.paper.id] = report
         storage.save_report(report)
@@ -320,6 +343,82 @@ def create_app(
             text=first.text,
             reliability=ReliabilityLevel.R0,
             evidence=first.evidence,
+        )
+
+    @app.get("/api/papers/{paper_id}/pdf")
+    def get_pdf(paper_id: str):
+        try:
+            paper = storage.get_paper(paper_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Paper not found")
+        if not paper.pdf_path.is_file():
+            raise HTTPException(status_code=404, detail="PDF missing on disk")
+        return FileResponse(paper.pdf_path, media_type="application/pdf", filename=paper.pdf_path.name)
+
+    @app.get("/api/papers/{paper_id}/chunks")
+    def get_chunks(paper_id: str):
+        """Page-level text chunks + page sizes for the PDF viewer."""
+
+        try:
+            paper = storage.get_paper(paper_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Paper not found")
+
+        chunks_file = storage.chunks_path(paper_id)
+        parsed = load_chunks(chunks_file)
+        if parsed is None and paper.pdf_path.is_file():
+            try:
+                parsed = parse_pdf(paper.pdf_path)
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=f"PDF parse failed: {exc}")
+            if parsed.chunks:
+                save_chunks(chunks_file, parsed)
+        if parsed is None:
+            raise HTTPException(status_code=404, detail="No parsed chunks available")
+        return parsed.to_dict()
+
+    @app.post("/api/papers/{paper_id}/ask-selection")
+    def ask_selection(paper_id: str, request: AskSelectionRequest):
+        """Treat a user PDF selection as a focused R0 evidence claim.
+
+        Used by the frontend "Ask about selection" workflow. We locate the
+        selection in the parsed chunks, return a Claim whose evidence is the
+        located span, and optionally pipe ``question`` into the agent later.
+        """
+
+        try:
+            paper = storage.get_paper(paper_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Paper not found")
+
+        chunks_file = storage.chunks_path(paper_id)
+        parsed = load_chunks(chunks_file)
+        if parsed is None and paper.pdf_path.is_file():
+            parsed = parse_pdf(paper.pdf_path)
+            if parsed.chunks:
+                save_chunks(chunks_file, parsed)
+
+        quote = (request.quote or "").strip()
+        if not quote:
+            raise HTTPException(status_code=400, detail="quote is required")
+
+        evidence = Evidence(
+            id=f"sel-{paper.id[:8]}",
+            source=paper.pdf_path.name,
+            page=request.page,
+            section=request.section,
+            quote=quote,
+            location_status=EvidenceLocationStatus.QUOTE_ONLY,
+        )
+        if parsed is not None and parsed.chunks:
+            EvidenceVerifier(parsed).annotate_evidence(evidence)
+
+        return Claim(
+            id="answer-selection",
+            text=request.question.strip() if request.question else f"User selection: {quote[:200]}",
+            reliability=ReliabilityLevel.R0,
+            evidence=[evidence],
+            uncertainty=None,
         )
 
     @app.post("/api/papers/{paper_id}/export-obsidian")
