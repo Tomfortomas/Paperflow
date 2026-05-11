@@ -40,6 +40,7 @@ def test_deepseek_report_prompt_requires_chinese_explanations(monkeypatch) -> No
 
     def fake_post(url, headers, json, timeout):
         captured["payload"] = json
+        captured["timeout"] = timeout
         return FakeResponse(
             {
                 "choices": [
@@ -99,9 +100,47 @@ def test_deepseek_report_prompt_requires_chinese_explanations(monkeypatch) -> No
     assert '"paper_title": string|null' in user_prompt
     assert "evidence.quote must be an exact quote" in user_prompt
     assert "not the PDF filename" in user_prompt
+    assert captured["timeout"].read <= 45
     assert report.paper_title == "Evidence-Aware Workflows"
     assert report.summary[0].text == "本文提出一个带证据的论文阅读工作流。"
     assert report.summary[0].evidence[0].quote == "We introduce an evidence-aware workflow."
+
+
+def test_deepseek_report_prompt_has_bounded_paper_text(monkeypatch) -> None:
+    captured = {}
+
+    def fake_post(url, headers, json, timeout):
+        captured["prompt"] = json["messages"][1]["content"]
+        return FakeResponse(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json_dumps(
+                                {
+                                    "paper_id": "paper-1",
+                                    "paper_title": None,
+                                    "summary": [],
+                                    "sections": [],
+                                    "related_work": [],
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("app.deepseek.httpx.post", fake_post)
+    client = DeepSeekClient(api_key="key")
+
+    client.generate_reading_report(
+        paper_id="paper-1",
+        source_name="paper.pdf",
+        paper_text="A" * 50000,
+    )
+
+    assert len(captured["prompt"]) < 15000
 
 
 class FakeResponse:

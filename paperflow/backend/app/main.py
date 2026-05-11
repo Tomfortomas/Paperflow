@@ -74,6 +74,23 @@ class ExportResponse(BaseModel):
     note_path: str
 
 
+def _mark_interrupted_report_runs(storage: PaperStorage) -> None:
+    for paper in storage.list_papers():
+        if paper.status.stage not in {"queued", "processing"}:
+            continue
+        try:
+            storage.load_report(paper.id)
+        except FileNotFoundError:
+            storage.update_status(
+                paper.id,
+                TaskStatus(
+                    stage="failed",
+                    message="Backend restarted while PaperAgent was running. Please rerun the Agent.",
+                    progress=1.0,
+                ),
+            )
+
+
 def create_app(
     storage_root: Path = Path("paperflow_data"),
     report_service: Optional[ReportService] = None,
@@ -94,6 +111,7 @@ def create_app(
     pipeline_factory = (lambda: r1_pipeline) if r1_pipeline is not None else R1SearchPipeline
     reports: Dict[str, ReadingReport] = {}
     task_queue = TaskQueue(storage_root / "tasks")
+    _mark_interrupted_report_runs(storage)
 
     def create_session_from_pdf(
         tmp_path: Path,

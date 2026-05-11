@@ -11,6 +11,10 @@ import httpx
 from app.models import ReadingReport
 
 
+REPORT_TEXT_BUDGET = 12000
+REPORT_READ_TIMEOUT_SECONDS = 45.0
+
+
 class DeepSeekClient:
     def __init__(
         self,
@@ -96,7 +100,7 @@ class DeepSeekClient:
             "filename. If the title is unclear, return null.\n\n"
             f"paper_id: {paper_id}\n"
             f"source_name: {source_name}\n"
-            f"paper_text:\n{paper_text[:18000]}"
+            f"paper_text:\n{paper_text[:REPORT_TEXT_BUDGET]}"
         )
         response = httpx.post(
             f"{self.base_url}/chat/completions",
@@ -113,7 +117,7 @@ class DeepSeekClient:
                 "temperature": 0,
                 "response_format": {"type": "json_object"},
             },
-            timeout=120,
+            timeout=_report_timeout(),
         )
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
@@ -151,3 +155,12 @@ def _load_deepseek_config() -> dict:
         if match:
             values[match.group(1)] = match.group(2)
     return values
+
+
+def _report_timeout() -> httpx.Timeout:
+    return httpx.Timeout(
+        connect=10.0,
+        read=float(os.getenv("DEEPSEEK_REPORT_READ_TIMEOUT", REPORT_READ_TIMEOUT_SECONDS)),
+        write=10.0,
+        pool=10.0,
+    )

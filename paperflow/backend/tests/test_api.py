@@ -135,6 +135,29 @@ def test_report_persists_after_app_restart(tmp_path: Path) -> None:
     assert report.json()["summary"][0]["text"] == "AI agent summary"
 
 
+def test_processing_import_is_marked_failed_after_app_restart(tmp_path: Path) -> None:
+    storage_root = tmp_path / "data"
+    blocking_service = BlockingReportService()
+    app = create_app(storage_root, report_service=blocking_service)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("interrupted.pdf", b"Abstract: interrupted", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+
+    assert blocking_service.started.wait(timeout=2)
+    assert client.get(f"/api/papers/{paper_id}/status").json()["stage"] == "processing"
+
+    restarted_client = TestClient(create_app(storage_root, report_service=ReportService(agent=FakePaperAgent())))
+    status = restarted_client.get(f"/api/papers/{paper_id}/status").json()
+
+    assert status["stage"] == "failed"
+    assert "Backend restarted" in status["message"]
+    blocking_service.release.set()
+
+
 def test_delete_paper_removes_library_entry_and_artifacts(tmp_path: Path) -> None:
     storage_root = tmp_path / "data"
     app = create_app(storage_root, report_service=ReportService(agent=FakePaperAgent()))
