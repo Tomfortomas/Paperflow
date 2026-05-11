@@ -1923,6 +1923,115 @@ input[type="file"]::file-selector-button:hover {
   color: var(--ink-1);
 }
 
+.agent-chat {
+  gap: var(--space-4);
+}
+.agent-chat-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.agent-chat-status {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--ink-4);
+}
+.agent-chat-status.is-running {
+  color: var(--r1-ink);
+}
+.agent-chat-status.is-completed {
+  color: var(--r0-ink);
+}
+.agent-chat-status.is-failed {
+  color: var(--accent);
+}
+
+.agent-process,
+.agent-transcript,
+.agent-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.agent-process-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--rule);
+  background: color-mix(in oklch, var(--paper-2) 74%, white);
+  font-family: var(--font-sans);
+  font-size: var(--t-micro);
+}
+.agent-process-card p {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.agent-process-card span {
+  color: var(--ink-4);
+}
+.agent-process-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-top: 0.45em;
+  border: 1px solid var(--ink-5);
+  background: var(--paper-1);
+}
+.agent-process-card.is-running .agent-process-dot {
+  border-color: var(--r1-ink);
+  background: var(--r1-bg);
+}
+.agent-process-card.is-completed .agent-process-dot {
+  border-color: var(--r0-ink);
+  background: var(--r0-bg);
+}
+.agent-process-card.is-failed .agent-process-dot {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.agent-message {
+  padding: var(--space-3);
+  border: 1px solid var(--rule);
+  background: var(--paper-1);
+}
+.agent-message.is-user {
+  background: transparent;
+}
+.agent-message-role {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--ink-4);
+}
+.agent-message p:not(.agent-message-role):not(.agent-message-evidence) {
+  font-size: 15px;
+  line-height: 1.5;
+}
+.agent-message-evidence {
+  margin-top: var(--space-2);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--rule-strong);
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.agent-composer {
+  position: sticky;
+  bottom: var(--space-3);
+  padding-top: var(--space-2);
+  background: var(--paper-1);
+}
+.agent-composer .btn-link {
+  align-self: flex-end;
+}
+
 /* ============================================================================
    EMPTY REPORT (paper still parsing)
    ============================================================================ */
@@ -1954,6 +2063,15 @@ input[type="file"]::file-selector-button:hover {
   background: var(--paper-2);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.pdf-viewer {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--space-1);
+  overscroll-behavior-x: contain;
 }
 
 .pdf-viewer-toolbar {
@@ -1992,8 +2110,9 @@ input[type="file"]::file-selector-button:hover {
 
 .pdf-viewer-canvas-wrap {
   position: relative;
-  display: inline-block;
-  margin: 0 auto;
+  display: block;
+  width: max-content;
+  margin-inline: auto;
   user-select: text;
 }
 

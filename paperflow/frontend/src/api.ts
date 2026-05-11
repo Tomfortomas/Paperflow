@@ -5,6 +5,8 @@ import type {
   ComparisonTable,
   FieldMap,
   Paper,
+  PaperChatRequest,
+  PaperChatResponse,
   ParsedPdfPayload,
   PaperSession,
   R1SearchResult,
@@ -34,6 +36,7 @@ export interface PaperflowClient {
   getReport(paperId: string): Promise<ReadingReport>;
   askPaper(paperId: string, question: string): Promise<Claim>;
   askSelection(paperId: string, payload: AskSelectionPayload): Promise<Claim>;
+  chatPaper(paperId: string, payload: PaperChatRequest): Promise<PaperChatResponse>;
   getChunks(paperId: string): Promise<ParsedPdfPayload>;
   pdfUrl(paperId: string): string;
   runR1Search(paperId: string): Promise<R1SearchResult>;
@@ -116,6 +119,13 @@ export function createPaperflowClient(baseUrl = defaultBaseUrl): PaperflowClient
     },
     async askSelection(paperId: string, payload: AskSelectionPayload) {
       return request<Claim>(`${baseUrl}/api/papers/${paperId}/ask-selection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    },
+    async chatPaper(paperId: string, payload: PaperChatRequest) {
+      return request<PaperChatResponse>(`${baseUrl}/api/papers/${paperId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

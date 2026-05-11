@@ -10,6 +10,7 @@ import type {
   FieldMapRelationshipGraph,
   MilestonePaper,
   Paper,
+  PaperChatResponse,
   PaperSession,
   R1QueryTraceEntry,
   ReadingReport,
@@ -87,9 +88,14 @@ const UI_TEXT = {
     evidenceDetail: "证据详情",
     missingEvidence: "缺少证据。",
     selectClaim: "选择一个 claim 查看证据。",
-    focusedQa: "聚焦追问",
+    agentChat: "Agent 对话",
+    chatIdle: "等待提问",
+    chatRunning: "Agent 正在处理",
+    chatCompleted: "回答已生成",
+    chatFailed: "回答失败",
     askPlaceholder: "例如:只看 benchmark 和 dataset",
-    ask: "提问",
+    ask: "发送",
+    processCards: "过程",
     obsidian: "Obsidian",
     saveNote: "保存 / 更新 Obsidian 笔记",
     savedTo: (path: string) => `已保存到 ${path}`,
@@ -234,9 +240,14 @@ const UI_TEXT = {
     evidenceDetail: "Evidence Detail",
     missingEvidence: "Missing evidence.",
     selectClaim: "Select a claim to inspect its evidence.",
-    focusedQa: "Focused Q&A",
-    askPlaceholder: "e.g. 只看 benchmark 和 dataset",
-    ask: "Ask",
+    agentChat: "Agent Chat",
+    chatIdle: "Waiting for a question",
+    chatRunning: "Agent is working",
+    chatCompleted: "Answer generated",
+    chatFailed: "Answer failed",
+    askPlaceholder: "e.g. focus on benchmark and dataset",
+    ask: "Send",
+    processCards: "Process",
     obsidian: "Obsidian",
     saveNote: "Save / Update Obsidian Note",
     savedTo: (path: string) => `Saved to ${path}`,
@@ -315,6 +326,8 @@ interface ImportActivity {
   title?: string;
   message?: string;
 }
+
+type ChatPanelStatus = "idle" | "running" | "completed" | "failed";
 
 export function App({
   initialPapers = [],
@@ -884,7 +897,8 @@ function Workspace({
   const text = UI_TEXT[locale];
   const displayTitle = report?.paper_title ?? paper.title;
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<Claim | null>(null);
+  const [chat, setChat] = useState<PaperChatResponse | null>(null);
+  const [chatStatus, setChatStatus] = useState<ChatPanelStatus>("idle");
   const [notePath, setNotePath] = useState<string | null>(paper.note_path ?? null);
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(
     report?.summary[0] ?? null,
@@ -925,19 +939,86 @@ function Workspace({
     return { page: first.page, bbox: first.bbox };
   })();
 
-  async function askFocusedQuestion() {
+  async function askAgentChat() {
     if (!question.trim()) {
       return;
     }
-    const result = await client.askPaper(paper.id, question);
-    setAnswer(result);
+    const firstEvidence = selectedClaim?.evidence?.[0];
+    const userQuestion = question;
+    setQuestion("");
+    setChatStatus("running");
+    setChat({
+      id: `local-${Date.now()}`,
+      paper_id: paper.id,
+      status: "running",
+      steps: [
+        { id: "read-report", label: "Read report", status: "running" },
+        { id: "locate-evidence", label: "Locate evidence", status: "pending" },
+        { id: "check-r1", label: "Check R1 context", status: "pending" },
+        { id: "compose-answer", label: "Compose answer", status: "pending" },
+      ],
+      messages: [{ id: `user-${Date.now()}`, role: "user", content: userQuestion }],
+      answer: {
+        id: "pending",
+        text: "",
+        reliability: "R2",
+        evidence: [],
+      },
+    });
+    try {
+      const result = await client.chatPaper(paper.id, {
+        question: userQuestion,
+        selected_claim_id: selectedClaim?.id ?? null,
+        selected_evidence_id: firstEvidence?.id ?? null,
+        page: firstEvidence?.page ?? null,
+        quote: firstEvidence?.quote ?? null,
+        section: firstEvidence?.section ?? null,
+      });
+      setChat(result);
+      setChatStatus("completed");
+    } catch {
+      setChatStatus("failed");
+      setChat((current) =>
+        current
+          ? {
+              ...current,
+              status: "failed",
+              steps: current.steps.map((step) =>
+                step.status === "running" ? { ...step, status: "failed" } : step,
+              ),
+            }
+          : null,
+      );
+    }
   }
 
   async function askSelection(quote: string, page: number) {
     if (!quote.trim()) return;
     try {
       const result = await client.askSelection(paper.id, { quote, page });
-      setAnswer(result);
+      setChat({
+        id: `selection-${Date.now()}`,
+        paper_id: paper.id,
+        status: "completed",
+        steps: [
+          { id: "read-report", label: "Read report", status: "completed" },
+          { id: "locate-evidence", label: "Locate evidence", status: "completed" },
+          { id: "compose-answer", label: "Compose answer", status: "completed" },
+        ],
+        messages: [
+          { id: `user-selection-${Date.now()}`, role: "user", content: quote },
+          {
+            id: `assistant-selection-${Date.now()}`,
+            role: "assistant",
+            content: result.text,
+            reliability: result.reliability,
+            evidence: result.evidence,
+            uncertainty: result.uncertainty,
+          },
+        ],
+        answer: result,
+      });
+      setChatStatus("completed");
     } catch {
       /* swallow */
     }
@@ -1008,10 +1089,11 @@ function Workspace({
           </div>
         </section>
         <Rail
-          answer={answer}
+          chat={chat}
+          chatStatus={chatStatus}
           locale={locale}
           notePath={notePath}
-          onAsk={askFocusedQuestion}
+          onAsk={askAgentChat}
           onExport={exportNote}
           onQuestionChange={setQuestion}
           onRerun={onRerun}
@@ -1167,10 +1249,11 @@ function Workspace({
       </section>
 
       <Rail
-        answer={answer}
+        chat={chat}
+        chatStatus={chatStatus}
         locale={locale}
         notePath={notePath}
-        onAsk={askFocusedQuestion}
+        onAsk={askAgentChat}
         onExport={exportNote}
         onQuestionChange={setQuestion}
         onRerun={onRerun}
@@ -1311,7 +1394,8 @@ function RelatedItem({
 }
 
 function Rail({
-  answer,
+  chat,
+  chatStatus,
   locale,
   notePath,
   onAsk,
@@ -1322,7 +1406,8 @@ function Rail({
   question,
   selectedClaim,
 }: {
-  answer: Claim | null;
+  chat: PaperChatResponse | null;
+  chatStatus: ChatPanelStatus;
   locale: Locale;
   notePath: string | null;
   onAsk: () => Promise<void>;
@@ -1379,24 +1464,76 @@ function Rail({
         )}
       </section>
 
-      <section className="rail-block rail-ask">
-        <p className="label-section">{text.focusedQa}</p>
-        <input
-          placeholder={text.askPlaceholder}
-          value={question}
-          onChange={(event) => onQuestionChange(event.target.value)}
-        />
-        <button type="button" className="btn-link" onClick={() => void onAsk()}>
-          {text.ask}
-        </button>
-        {answer ? (
-          <div className="rail-answer">
-            <span className={`badge ${answer.reliability.toLowerCase()}`}>
-              {answer.reliability}
-            </span>
-            <p className="answer-text">{answer.text}</p>
-          </div>
-        ) : null}
+      <section className="rail-block agent-chat">
+        <div className="agent-chat-head">
+          <p className="label-section">{text.agentChat}</p>
+          <span className={`agent-chat-status is-${chatStatus}`}>
+            {chatStatus === "running"
+              ? text.chatRunning
+              : chatStatus === "completed"
+                ? text.chatCompleted
+                : chatStatus === "failed"
+                  ? text.chatFailed
+                  : text.chatIdle}
+          </span>
+        </div>
+        {chat ? (
+          <>
+            <div className="agent-process" aria-label={text.processCards}>
+              {chat.steps.map((step) => (
+                <div className={`agent-process-card is-${step.status}`} key={step.id}>
+                  <span className="agent-process-dot" aria-hidden="true" />
+                  <div>
+                    <p>{step.label}</p>
+                    {step.detail ? <span>{step.detail}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="agent-transcript">
+              {chat.messages.map((message) => (
+                <article className={`agent-message is-${message.role}`} key={message.id}>
+                  <p className="agent-message-role">
+                    {message.role === "user" ? "You" : "Agent"}
+                    {message.reliability ? (
+                      <span className={`badge ${message.reliability.toLowerCase()}`}>
+                        {message.reliability}
+                      </span>
+                    ) : null}
+                  </p>
+                  <p>{message.content}</p>
+                  {message.evidence && message.evidence.length > 0 ? (
+                    <p className="agent-message-evidence">
+                      {message.evidence[0].quote}
+                    </p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="rail-message muted-soft">{text.chatIdle}</p>
+        )}
+        <div className="agent-composer">
+          <input
+            placeholder={text.askPlaceholder}
+            value={question}
+            onChange={(event) => onQuestionChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                void onAsk();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="btn-link"
+            disabled={!question.trim() || chatStatus === "running"}
+            onClick={() => void onAsk()}
+          >
+            {text.ask}
+          </button>
+        </div>
       </section>
 
       <section className="rail-block">

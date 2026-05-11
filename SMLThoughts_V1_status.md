@@ -8,7 +8,8 @@
 - [x] 当前主界面已改成更偏“论文研读台”的 editorial UI：Library-first 首页、Report-first Workspace、持久顶部导航栏、导入状态反馈、论文处理进度、删除/打开动作、重复 arXiv 互斥提醒，以及更有层次的导入工作台面板。
 - [x] 已增加统一开发启动脚本：`paperflow/run-dev.sh`，可以同时启动后端 FastAPI 和前端 Vite。
 - [x] 已修复论文解析卡在 35% 的主要问题：后端 reload / restart 后会把未完成的 PaperAgent 解析标记为 failed，DeepSeek 报告请求也增加了输入长度预算和 45 秒 read timeout，不再无限挂起。
-- [ ] 仍未完成：正式的 Agent 对话区 / transcript / composer。当前只有 focused Q&A，不能完全支持类似 DeepSeek-TUI 那样的动态阅读对话流。
+- [~] V3 第一版 Agent 对话区已实现：Workspace 右侧从 focused Q&A 升级为 transcript + process cards + composer + status 的轻量 Agent Chat；后续还需要 SSE 真流式、持久化 transcript 和真实工具调用过程。
+- [x] PDF 阅读器已修复布局溢出问题：阅读器会根据 Workspace 主栏宽度自适应缩放，并保留横向滚动兜底，避免 PDF canvas 覆盖右侧证据 / Agent 对话栏。
 
 说明：
 
@@ -91,10 +92,11 @@
 
 ##### 当前仍需要推进的能力
 
-- [ ] Agent 对话区：需要类似 DeepSeek-TUI 的 transcript + composer + running/status/process cards，让用户可以边读文章边和 AI Agent 动态对话。
-- [ ] Agent 对话需要显示过程：读取报告、定位证据、必要时运行 R1、生成回答，并把这些过程以轻量 card 展示出来。
-- [ ] Agent 对话的输出应继续保持 R0/R1/R2 和 evidence 约束，不能退化成普通聊天。
-- [ ] 对话历史持久化：当前 focused Q&A 结果不持久。
+- [x] Agent 对话区第一版：已实现类似 DeepSeek-TUI 的 transcript + composer + running/status/process cards，让用户可以边读文章边和 AI Agent 动态对话。
+- [x] Agent 对话过程展示第一版：已显示读取报告、定位证据、检查 R1 上下文、生成回答等轻量 process cards。
+- [x] Agent 对话输出继续保持 R0/R1/R2 和 evidence 约束，不退化成普通聊天。
+- [ ] Agent 对话真流式：当前只是步骤状态的“流式感”，尚未实现 SSE / WebSocket token streaming。
+- [ ] 对话历史持久化：当前 Agent Chat transcript 仍是前端会话内状态，尚未持久化到 SQLite。
 - [ ] 关系图 / 脉络图需要进一步改成 Agent 理解和分析后构建；当前已经修正为按 R1 引用方向区分 predecessor / successor，但还不是完整语义理解。
 - [ ] Human-in-the-loop：milestone / relationship graph / Field Map 中关键判断应支持人工确认和修正。
 - [ ] 更强 PDF 交互：长文阅读、跨页高亮、多 evidence 定位、figure/table 级引用仍需增强。

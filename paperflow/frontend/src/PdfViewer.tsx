@@ -44,6 +44,8 @@ export function PdfViewer({
   const [pdfDoc, setPdfDoc] = useState<import("pdfjs-dist").PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [renderedSize, setRenderedSize] = useState<{ width: number; height: number } | null>(null);
+  const [renderedScale, setRenderedScale] = useState(scale);
+  const [containerWidth, setContainerWidth] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   // Load PDF.js + the document once per pdfUrl.
@@ -83,6 +85,23 @@ export function PdfViewer({
     };
   }, [pdfUrl]);
 
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    const updateWidth = () => setContainerWidth(element.clientWidth);
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   // Render the active page whenever pdfDoc or `page` changes.
   useEffect(() => {
     if (!pdfDoc || !pdfModule || !canvasRef.current) {
@@ -95,7 +114,12 @@ export function PdfViewer({
       try {
         const pdfPage = await pdfDoc.getPage(safePage);
         if (cancelled) return;
-        const viewport = pdfPage.getViewport({ scale });
+        const naturalViewport = pdfPage.getViewport({ scale: 1 });
+        const fitScale =
+          containerWidth > 0
+            ? Math.min(scale, Math.max(0.72, (containerWidth - 2) / naturalViewport.width))
+            : scale;
+        const viewport = pdfPage.getViewport({ scale: fitScale });
 
         const canvas = canvasRef.current!;
         const context = canvas.getContext("2d");
@@ -105,6 +129,7 @@ export function PdfViewer({
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
         setRenderedSize({ width: viewport.width, height: viewport.height });
+        setRenderedScale(fitScale);
 
         await pdfPage.render({ canvasContext: context, viewport }).promise;
 
@@ -139,21 +164,21 @@ export function PdfViewer({
     return () => {
       cancelled = true;
     };
-  }, [pdfDoc, pdfModule, page, scale, numPages]);
+  }, [pdfDoc, pdfModule, page, scale, numPages, containerWidth]);
 
   // Highlight rectangle (PDF points → canvas px).
   const highlightStyle = (() => {
     if (!highlight || highlight.page !== page || !renderedSize) {
       return null;
     }
-    const [, , , pageHeight] = effectivePageBbox(highlight, pageSizes, renderedSize, scale);
+    const [, , , pageHeight] = effectivePageBbox(highlight, pageSizes, renderedSize);
     const [x0, y0, x1, y1] = highlight.bbox;
     // PDF.js viewport y is already top-down in canvas space so we use bbox directly.
     return {
-      left: x0 * scale,
-      top: y0 * scale,
-      width: Math.max(2, (x1 - x0) * scale),
-      height: Math.max(2, (y1 - y0) * scale),
+      left: x0 * renderedScale,
+      top: y0 * renderedScale,
+      width: Math.max(2, (x1 - x0) * renderedScale),
+      height: Math.max(2, (y1 - y0) * renderedScale),
       maxHeight: pageHeight,
     };
   })();
@@ -208,7 +233,6 @@ function effectivePageBbox(
   highlight: PdfBboxHighlight,
   _pageSizes: number[][] | undefined,
   renderedSize: { width: number; height: number },
-  _scale: number,
 ): [number, number, number, number] {
   // Currently unused but reserved for non-uniform-page support: returns the
   // rendered page size so the highlight can be clipped to the visible canvas.

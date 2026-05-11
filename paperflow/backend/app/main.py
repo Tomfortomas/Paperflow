@@ -30,6 +30,10 @@ from app.models import (
     FieldMap,
     ImportSourceType,
     PaperMetadata,
+    PaperChatMessage,
+    PaperChatRequest,
+    PaperChatResponse,
+    PaperChatStep,
     PaperSession,
     ReadingReport,
     ReliabilityLevel,
@@ -89,6 +93,90 @@ def _mark_interrupted_report_runs(storage: PaperStorage) -> None:
                     progress=1.0,
                 ),
             )
+
+
+def _answer_chat_from_report(
+    report: ReadingReport,
+    request: PaperChatRequest,
+    question: str,
+) -> Claim:
+    selected = _find_claim(report, request.selected_claim_id)
+    if selected is not None:
+        return Claim(
+            id="chat-answer",
+            text=selected.text,
+            reliability=selected.reliability,
+            evidence=_chat_evidence(selected, request),
+            uncertainty=selected.uncertainty,
+        )
+
+    question_lower = question.lower()
+    for section in report.sections:
+        section_key = section.title.lower().split("/")[0].strip()
+        if section_key and section_key in question_lower:
+            claim = section.claims[0]
+            return Claim(
+                id="chat-answer",
+                text=claim.text,
+                reliability=claim.reliability,
+                evidence=_chat_evidence(claim, request),
+                uncertainty=claim.uncertainty,
+            )
+        if "benchmark" in question_lower and "benchmark" in section.title.lower():
+            claim = section.claims[0]
+            return Claim(
+                id="chat-answer",
+                text=claim.text,
+                reliability=claim.reliability,
+                evidence=_chat_evidence(claim, request),
+                uncertainty=claim.uncertainty,
+            )
+
+    if request.quote:
+        evidence = Evidence(
+            id=request.selected_evidence_id or "chat-selection",
+            source=report.paper_title or "selected PDF text",
+            page=request.page,
+            section=request.section,
+            quote=request.quote.strip(),
+            location_status=EvidenceLocationStatus.PAGE_AND_QUOTE if request.page else EvidenceLocationStatus.QUOTE_ONLY,
+        )
+        return Claim(
+            id="chat-answer",
+            text=f"基于你选中的证据，Agent 将问题限定在这段原文内：{request.quote.strip()[:180]}",
+            reliability=ReliabilityLevel.R0,
+            evidence=[evidence],
+        )
+
+    first = report.summary[0]
+    return Claim(
+        id="chat-answer",
+        text=first.text,
+        reliability=first.reliability,
+        evidence=first.evidence,
+        uncertainty=first.uncertainty,
+    )
+
+
+def _find_claim(report: ReadingReport, claim_id: Optional[str]) -> Optional[Claim]:
+    if not claim_id:
+        return None
+    for claim in report.summary:
+        if claim.id == claim_id:
+            return claim
+    for section in report.sections:
+        for claim in section.claims:
+            if claim.id == claim_id:
+                return claim
+    return None
+
+
+def _chat_evidence(claim: Claim, request: PaperChatRequest) -> List[Evidence]:
+    if request.selected_evidence_id:
+        for evidence in claim.evidence:
+            if evidence.id == request.selected_evidence_id:
+                return [evidence]
+    return claim.evidence
 
 
 def create_app(
@@ -379,6 +467,63 @@ def create_app(
             text=first.text,
             reliability=ReliabilityLevel.R0,
             evidence=first.evidence,
+        )
+
+    @app.post("/api/papers/{paper_id}/chat")
+    def chat_paper(paper_id: str, request: PaperChatRequest):
+        question = request.question.strip()
+        if not question:
+            raise HTTPException(status_code=400, detail="question is required")
+        try:
+            report = reports.get(paper_id) or storage.load_report(paper_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Report not found")
+
+        answer = _answer_chat_from_report(report, request, question)
+        steps = [
+            PaperChatStep(
+                id="read-report",
+                label="Read report",
+                detail="Loaded the persisted Reading Report.",
+            ),
+            PaperChatStep(
+                id="locate-evidence",
+                label="Locate evidence",
+                detail="Used the selected claim/evidence when available.",
+            ),
+            PaperChatStep(
+                id="check-r1",
+                label="Check R1 context",
+                detail=f"Checked {len(report.related_work)} related-work entries.",
+            ),
+            PaperChatStep(
+                id="compose-answer",
+                label="Compose answer",
+                detail="Generated an evidence-aware answer with reliability label.",
+            ),
+        ]
+        messages = [
+            PaperChatMessage(
+                id=f"user-{paper_id[:8]}",
+                role="user",
+                content=question,
+            ),
+            PaperChatMessage(
+                id=f"assistant-{paper_id[:8]}",
+                role="assistant",
+                content=answer.text,
+                reliability=answer.reliability,
+                evidence=answer.evidence,
+                uncertainty=answer.uncertainty,
+            ),
+        ]
+        return PaperChatResponse(
+            id=f"chat-{paper_id[:8]}",
+            paper_id=paper_id,
+            status="completed",
+            steps=steps,
+            messages=messages,
+            answer=answer,
         )
 
     @app.get("/api/papers/{paper_id}/pdf")

@@ -70,6 +70,40 @@ export interface ReadingReport {
   related_work: RelatedWorkItem[];
 }
 
+export interface PaperChatRequest {
+  question: string;
+  selected_claim_id?: string | null;
+  selected_evidence_id?: string | null;
+  page?: number | null;
+  quote?: string | null;
+  section?: string | null;
+}
+
+export interface PaperChatStep {
+  id: string;
+  label: string;
+  status: "pending" | "running" | "completed" | "failed" | string;
+  detail?: string | null;
+}
+
+export interface PaperChatMessage {
+  id: string;
+  role: "user" | "assistant" | string;
+  content: string;
+  reliability?: ReliabilityLevel | null;
+  evidence?: Evidence[];
+  uncertainty?: string | null;
+}
+
+export interface PaperChatResponse {
+  id: string;
+  paper_id: string;
+  status: "idle" | "running" | "completed" | "failed" | string;
+  steps: PaperChatStep[];
+  messages: PaperChatMessage[];
+  answer: Claim;
+}
+
 export interface TaskStatus {
   stage: "queued" | "processing" | "completed" | "failed" | string;
   message: string;

@@ -75,6 +75,40 @@ class ReadingReport(BaseModel):
     related_work: List[RelatedWorkItem] = Field(default_factory=list)
 
 
+class PaperChatRequest(BaseModel):
+    question: str
+    selected_claim_id: Optional[str] = None
+    selected_evidence_id: Optional[str] = None
+    page: Optional[int] = None
+    quote: Optional[str] = None
+    section: Optional[str] = None
+
+
+class PaperChatStep(BaseModel):
+    id: str
+    label: str
+    status: str = "completed"
+    detail: Optional[str] = None
+
+
+class PaperChatMessage(BaseModel):
+    id: str
+    role: str
+    content: str
+    reliability: Optional[ReliabilityLevel] = None
+    evidence: List[Evidence] = Field(default_factory=list)
+    uncertainty: Optional[str] = None
+
+
+class PaperChatResponse(BaseModel):
+    id: str
+    paper_id: str
+    status: str = "completed"
+    steps: List[PaperChatStep] = Field(default_factory=list)
+    messages: List[PaperChatMessage] = Field(default_factory=list)
+    answer: Claim
+
+
 class TaskStatus(BaseModel):
     stage: str
     message: str = ""

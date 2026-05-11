@@ -47,6 +47,60 @@ def test_import_lists_reads_asks_and_exports_note(tmp_path: Path) -> None:
     assert Path(note["note_path"]).exists()
 
 
+def test_chat_returns_transcript_steps_and_evidence(tmp_path: Path) -> None:
+    app = create_app(tmp_path / "data", report_service=ReportService(agent=FakePaperAgent()))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("paper.pdf", b"Abstract: A paper reading IDE.\nBenchmark: Evidence coverage.", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+    wait_for_status(client, paper_id, "completed")
+
+    chat = client.post(
+        f"/api/papers/{paper_id}/chat",
+        json={
+            "question": "只看 benchmark",
+            "selected_claim_id": "claim-task",
+            "selected_evidence_id": "e2",
+            "page": 2,
+            "quote": "structured reports",
+        },
+    )
+
+    assert chat.status_code == 200
+    payload = chat.json()
+    assert payload["paper_id"] == paper_id
+    assert payload["status"] == "completed"
+    assert [step["id"] for step in payload["steps"]] == [
+        "read-report",
+        "locate-evidence",
+        "check-r1",
+        "compose-answer",
+    ]
+    assert payload["messages"][0]["role"] == "user"
+    assert payload["messages"][1]["role"] == "assistant"
+    assert payload["answer"]["reliability"] == "R0"
+    assert payload["answer"]["evidence"][0]["quote"]
+
+
+def test_chat_rejects_empty_question(tmp_path: Path) -> None:
+    app = create_app(tmp_path / "data", report_service=ReportService(agent=FakePaperAgent()))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("paper.pdf", b"Abstract: A paper reading IDE.", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+    wait_for_status(client, paper_id, "completed")
+
+    chat = client.post(f"/api/papers/{paper_id}/chat", json={"question": "  "})
+
+    assert chat.status_code == 400
+
+
 def test_reimport_same_content_replaces_old_library_entry(tmp_path: Path) -> None:
     """Phase 2: identical PDF bytes should dedup via content_hash."""
 

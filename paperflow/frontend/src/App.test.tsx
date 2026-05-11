@@ -139,6 +139,59 @@ describe("Paperflow app", () => {
     expect(screen.getByText(/已定位到页 \+ 段落/)).toBeInTheDocument();
   });
 
+  it("renders an Agent chat panel with transcript and process cards", async () => {
+    const user = userEvent.setup();
+    const client = fakeClient({
+      chatPaper: vi.fn().mockResolvedValue({
+        id: "chat-1",
+        paper_id: "paper-1",
+        status: "completed",
+        steps: [
+          { id: "read-report", label: "Read report", status: "completed", detail: "Loaded report" },
+          { id: "locate-evidence", label: "Locate evidence", status: "completed", detail: "Used evidence" },
+          { id: "check-r1", label: "Check R1 context", status: "completed", detail: "Checked related work" },
+          { id: "compose-answer", label: "Compose answer", status: "completed", detail: "Generated answer" },
+        ],
+        messages: [
+          { id: "user-1", role: "user", content: "只看 benchmark" },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "It extracts structured reading reports.",
+            reliability: "R0",
+            evidence: [{ id: "e2", source: "Paperflow.pdf", page: 2, quote: "structured reports" }],
+          },
+        ],
+        answer: {
+          id: "chat-answer",
+          text: "It extracts structured reading reports.",
+          reliability: "R0",
+          evidence: [{ id: "e2", source: "Paperflow.pdf", page: 2, quote: "structured reports" }],
+        },
+      }),
+    });
+    render(<App client={client} initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+    await user.click(screen.getAllByRole("button", { name: /查看 1 条证据/i })[1]);
+    await user.type(screen.getByPlaceholderText(/benchmark/), "只看 benchmark");
+    await user.click(screen.getByRole("button", { name: /^发送$/ }));
+
+    expect(client.chatPaper).toHaveBeenCalledWith(
+      "paper-1",
+      expect.objectContaining({
+        question: "只看 benchmark",
+        selected_claim_id: "claim-task",
+        selected_evidence_id: "e2",
+        page: 2,
+        quote: "structured reports",
+      }),
+    );
+    expect(await screen.findByText("Read report")).toBeInTheDocument();
+    expect(screen.getByText("只看 benchmark")).toBeInTheDocument();
+    expect(screen.getAllByText("It extracts structured reading reports.").length).toBeGreaterThan(0);
+  });
+
   it("offers a PDF viewer toggle once the report is ready", async () => {
     const user = userEvent.setup();
     render(<App initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
@@ -339,6 +392,7 @@ function fakeClient(overrides: Partial<PaperflowClient> = {}): PaperflowClient {
     getReport: vi.fn(),
     askPaper: vi.fn(),
     askSelection: vi.fn(),
+    chatPaper: vi.fn(),
     getChunks: vi.fn().mockResolvedValue({ chunks: [], page_sizes: [] }),
     pdfUrl: vi.fn().mockReturnValue("http://127.0.0.1:8000/api/papers/paper-1/pdf"),
     runR1Search: vi.fn().mockResolvedValue({ items: [], query_trace: [] }),
