@@ -1,12 +1,15 @@
 import type {
   AgentStatus,
+  AgentTask,
   Claim,
+  ComparisonTable,
   FieldMap,
   Paper,
   ParsedPdfPayload,
   PaperSession,
   R1SearchResult,
   ReadingReport,
+  ResearchInsightReport,
   TaskStatus,
   ZoteroImportResult,
   ZoteroPreviewItem,
@@ -38,6 +41,13 @@ export interface PaperflowClient {
   getFieldMap(fieldMapId: string): Promise<FieldMap>;
   listFieldMaps(): Promise<FieldMap[]>;
   rerunFieldMap(fieldMapId: string): Promise<FieldMap>;
+  comparePapers(paperIds: string[]): Promise<ComparisonTable>;
+  generateInsights(fieldMapId: string): Promise<ResearchInsightReport>;
+  exportFieldMapObsidian(fieldMapId: string): Promise<{ note_path: string }>;
+  listTasks(): Promise<AgentTask[]>;
+  getTask(taskId: string): Promise<AgentTask>;
+  cancelTask(taskId: string): Promise<AgentTask>;
+  retryTask(taskId: string): Promise<AgentTask>;
   exportObsidian(paperId: string): Promise<{ note_path: string }>;
   rerunAgent(paperId: string): Promise<PaperSession>;
   getAgentStatus(): Promise<AgentStatus>;
@@ -135,6 +145,37 @@ export function createPaperflowClient(baseUrl = "http://127.0.0.1:8000"): Paperf
       return request<FieldMap>(`${baseUrl}/api/field-maps/${fieldMapId}/rerun`, {
         method: "POST",
       });
+    },
+    async comparePapers(paperIds: string[]) {
+      return request<ComparisonTable>(`${baseUrl}/api/compare`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paper_ids: paperIds }),
+      });
+    },
+    async generateInsights(fieldMapId: string) {
+      return request<ResearchInsightReport>(
+        `${baseUrl}/api/field-maps/${fieldMapId}/insights`,
+        { method: "POST" },
+      );
+    },
+    async exportFieldMapObsidian(fieldMapId: string) {
+      return request<{ note_path: string }>(
+        `${baseUrl}/api/field-maps/${fieldMapId}/export-obsidian`,
+        { method: "POST" },
+      );
+    },
+    async listTasks() {
+      return request<AgentTask[]>(`${baseUrl}/api/tasks`);
+    },
+    async getTask(taskId: string) {
+      return request<AgentTask>(`${baseUrl}/api/tasks/${taskId}`);
+    },
+    async cancelTask(taskId: string) {
+      return request<AgentTask>(`${baseUrl}/api/tasks/${taskId}/cancel`, { method: "POST" });
+    },
+    async retryTask(taskId: string) {
+      return request<AgentTask>(`${baseUrl}/api/tasks/${taskId}/retry`, { method: "POST" });
     },
     async exportObsidian(paperId: string) {
       return request<{ note_path: string }>(`${baseUrl}/api/papers/${paperId}/export-obsidian`, {

@@ -64,7 +64,7 @@ V2 progress (in active rollout):
 - [x] **Phase 1 — Evidence Workflow**: PyMuPDF block-level parser with section guesses; `EvidenceVerifier` fuzzy-matches every agent quote to page + bbox + `location_status`; PDF.js viewer with page jump, bbox highlight, and select-to-ask; TUI evidence panel surfaces bbox + status; new endpoints `GET /api/papers/{id}/pdf`, `GET /api/papers/{id}/chunks`, `POST /api/papers/{id}/ask-selection`
 - [x] **Phase 3 — Real R1 Search**: six-lane pipeline (seed → backward → forward → benchmark → survey → recent) over Semantic Scholar Graph API, OpenAlex (fallback), and Papers with Code, plus a regex-based local references parser; each candidate carries author / year / venue / DOI / arXiv / citation counts and a `comparison_risk` note; new endpoints `POST /api/papers/{id}/r1-search` and `GET /api/papers/{id}/related`; web and TUI show a richer Related Work panel with the per-lane query trace.
 - [x] **Phase 4 — Field Map**: heuristic Milestone Agent scores R1 candidates on citations / velocity / venue / category, Timeline aggregator orders milestones + follow-ups chronologically, Field Map aggregator yields task taxonomy, datasets/benchmarks, metrics, method families, open problems (from R0 limitations), recent trends (R2) and research opportunities (R2); new endpoints `POST /api/field-maps`, `GET /api/field-maps/{id}`, `POST /api/field-maps/{id}/rerun`, `GET /api/field-maps`; web Workspace gains a Field Map section, TUI gets a dedicated Field Map screen (`2` to open).
-- [ ] **Phase 5 — Compare + R2 + Cancel/Retry/Resume**: multi-paper compare, Research Insight Agent (R2), task queue lifecycle
+- [x] **Phase 5 — Compare + R2 + Cancel/Retry/Resume**: `POST /api/compare` pivots two or more papers across Task / Dataset / Benchmark / Method / Compute / Result / Limitations / Availability with per-cell evidence and per-row `comparison_risk`; `POST /api/field-maps/{id}/insights` runs the Research Insight Agent (R2 only — trends, opportunities, method-angle, story, writing-scaffold); `POST /api/field-maps/{id}/export-obsidian` writes a `#milestone` / `#R2`-tagged note for the field map; new task queue (`GET /api/tasks`, `GET /api/tasks/{id}`, `POST /api/tasks/{id}/cancel`, `POST /api/tasks/{id}/retry`) persists status snapshots, recovers them on restart (any `running` task is flipped to `failed` so you can retry), and supports cooperative cancellation via a shared `threading.Event`.
 
 ---
 
@@ -204,6 +204,8 @@ Keyboard bindings:
 | Workspace | `1` | Run the six-lane R1 related-work search |
 | Workspace | `2` | Open the Field Map screen (milestones / timeline / open problems) |
 | Field Map | `g` | Generate or re-run the Field Map for this paper |
+| Field Map | `i` | Generate R2 Research Insights |
+| Field Map | `o` | Save the Field Map Obsidian note |
 | Field Map | `b` / `Esc` | Back to Workspace |
 | Workspace | `s` | Save / update the Obsidian note |
 | Workspace | `r` | Re-run agent for this paper |

@@ -760,6 +760,8 @@ class FieldMapScreen(Screen):
     BINDINGS = [
         Binding("b,escape", "back", "Back", show=True),
         Binding("g", "generate", "Generate / Rerun", show=True),
+        Binding("i", "insights", "R2 Insights", show=True),
+        Binding("o", "export_obsidian", "Save Obsidian", show=True),
     ]
 
     def __init__(self, paper: Dict[str, Any]) -> None:
@@ -862,6 +864,45 @@ class FieldMapScreen(Screen):
         if not items:
             return
         log.write(f"[bold]{label}:[/bold] " + ", ".join(items))
+
+    async def action_insights(self) -> None:
+        if self.field_map is None:
+            self._notice("Run [g] to generate a Field Map first.", style="yellow")
+            return
+        log = self.query_one("#fm-log", RichLog)
+        log.write("\n[yellow]Generating R2 research insights…[/yellow]")
+        try:
+            payload = await self.app.client.generate_insights(str(self.field_map["id"]))
+        except PaperflowAPIError as exc:
+            log.write(f"[bold red]Insights failed:[/bold red] {exc}")
+            return
+        insights = payload.get("insights") or []
+        if not insights:
+            log.write("[dim]No insights returned.[/dim]")
+            return
+        log.write("[bold]R2 Research Insights[/bold]")
+        for ins in insights:
+            log.write(f"  • [yellow]R2 · {ins.get('kind')}[/yellow] {ins.get('text')}")
+            rationale = ins.get("rationale")
+            if rationale:
+                log.write(f"      [dim]rationale:[/dim] {rationale}")
+
+    async def action_export_obsidian(self) -> None:
+        if self.field_map is None:
+            self._notice("Generate a Field Map first.", style="yellow")
+            return
+        log = self.query_one("#fm-log", RichLog)
+        try:
+            payload = await self.app.client.export_field_map_obsidian(
+                str(self.field_map["id"])
+            )
+        except PaperflowAPIError as exc:
+            log.write(f"[bold red]Obsidian export failed:[/bold red] {exc}")
+            return
+        log.write(f"\n[green]Saved Field Map note:[/green] {payload.get('note_path')}")
+
+    def _notice(self, message: str, *, style: str = "yellow") -> None:
+        self.query_one("#fm-log", RichLog).write(f"[{style}]{message}[/{style}]")
 
 
 # --------------------------------------------------------------------- App

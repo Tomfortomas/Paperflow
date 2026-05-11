@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.compare import compare_papers
 from app.deepseek import DeepSeekClient
 from app.evidence_verifier import EvidenceVerifier
 from app.field_map import build_field_map
@@ -22,6 +23,7 @@ from app.metadata import (
     pdf_url_from_metadata,
 )
 from app.models import (
+    AgentTaskKind,
     Claim,
     Evidence,
     EvidenceLocationStatus,
@@ -33,12 +35,14 @@ from app.models import (
     ReliabilityLevel,
     TaskStatus,
 )
-from app.obsidian import render_obsidian_note
+from app.obsidian import render_field_map_note, render_obsidian_note
 from app.pdf_parser import load_chunks, parse_pdf, save_chunks
 from app.r1_search import R1SearchPipeline
 from app.refs_parser import extract_references_from_parsed
 from app.report_service import ReportService
+from app.research_insight import generate_insights
 from app.storage import PaperStorage
+from app.task_queue import TaskQueue
 from app.zotero import ZoteroError, ZoteroReader
 
 
@@ -89,6 +93,7 @@ def create_app(
     report_service = report_service or ReportService()
     pipeline_factory = (lambda: r1_pipeline) if r1_pipeline is not None else R1SearchPipeline
     reports: Dict[str, ReadingReport] = {}
+    task_queue = TaskQueue(storage_root / "tasks")
 
     def create_session_from_pdf(
         tmp_path: Path,
@@ -592,6 +597,93 @@ def create_app(
     @app.get("/api/field-maps")
     def list_field_maps():
         return storage.list_field_maps()
+
+    @app.post("/api/field-maps/{field_map_id}/export-obsidian")
+    def export_field_map_obsidian(field_map_id: str):
+        cached = storage.load_field_map(field_map_id)
+        if cached is None:
+            raise HTTPException(status_code=404, detail="Field map not found")
+        try:
+            field_map = FieldMap.model_validate(cached)
+        except Exception as exc:  # pragma: no cover — bad cache shape is rare
+            raise HTTPException(status_code=500, detail=f"Field map cache corrupted: {exc}")
+        markdown = render_field_map_note(field_map)
+        notes_dir = storage.note_dir
+        notes_dir.mkdir(parents=True, exist_ok=True)
+        note_name = f"field-map-{field_map.id}.md"
+        path = notes_dir / note_name
+        path.write_text(markdown, encoding="utf-8")
+        return ExportResponse(note_path=str(path))
+
+    # ----------------------------------------------------------- Phase 5: Insights
+
+    @app.post("/api/field-maps/{field_map_id}/insights")
+    def field_map_insights(field_map_id: str):
+        cached = storage.load_field_map(field_map_id)
+        if cached is None:
+            raise HTTPException(status_code=404, detail="Field map not found")
+        try:
+            field_map = FieldMap.model_validate(cached)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Field map cache corrupted: {exc}")
+        try:
+            report = reports.get(field_map.seed_paper_id) or storage.load_report(field_map.seed_paper_id)
+        except FileNotFoundError:
+            report = None
+        return generate_insights(field_map, report=report)
+
+    # ----------------------------------------------------------- Phase 5: Compare
+
+    @app.post("/api/compare")
+    def compare(payload: Dict[str, List[str]]):
+        paper_ids = payload.get("paper_ids") or []
+        if len(paper_ids) < 2:
+            raise HTTPException(status_code=400, detail="Need at least two paper_ids to compare")
+        papers = []
+        report_map: Dict[str, ReadingReport] = {}
+        for pid in paper_ids:
+            try:
+                paper = storage.get_paper(pid)
+            except FileNotFoundError:
+                raise HTTPException(status_code=404, detail=f"Paper {pid} not found")
+            papers.append(paper)
+            try:
+                report = reports.get(pid) or storage.load_report(pid)
+                if report is not None:
+                    report_map[pid] = report
+            except FileNotFoundError:
+                continue
+        return compare_papers(papers, report_map)
+
+    # ----------------------------------------------------------- Phase 5: Task queue
+
+    @app.get("/api/tasks")
+    def list_tasks():
+        return [task.model_dump(mode="json") for task in task_queue.list()]
+
+    @app.get("/api/tasks/{task_id}")
+    def get_task(task_id: str):
+        task = task_queue.get(task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return task.model_dump(mode="json")
+
+    @app.post("/api/tasks/{task_id}/cancel")
+    def cancel_task(task_id: str):
+        task = task_queue.cancel(task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return task.model_dump(mode="json")
+
+    @app.post("/api/tasks/{task_id}/retry")
+    def retry_task(task_id: str):
+        task = task_queue.retry(task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return task.model_dump(mode="json")
+
+    # Expose the queue so tests can submit fake work and inspect cancellation.
+    app.state.task_queue = task_queue
 
     return app
 

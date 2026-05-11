@@ -198,6 +198,79 @@ class TimelineEvent(BaseModel):
     evidence: List[Evidence] = Field(default_factory=list)
 
 
+class ComparisonCell(BaseModel):
+    """One cell in a multi-paper comparison table (PRD §4.9)."""
+
+    paper_id: str
+    paper_title: Optional[str] = None
+    value: Optional[str] = None
+    evidence: List[Evidence] = Field(default_factory=list)
+    comparison_risk: Optional[str] = None  # e.g. "different benchmark protocol"
+
+
+class ComparisonRow(BaseModel):
+    dimension: str  # "Task", "Dataset", "Benchmark / metric", …
+    description: Optional[str] = None
+    cells: List[ComparisonCell] = Field(default_factory=list)
+
+
+class ComparisonTable(BaseModel):
+    """Aggregated multi-paper comparison (PRD §4.9)."""
+
+    id: str
+    paper_ids: List[str] = Field(default_factory=list)
+    dimensions: List[ComparisonRow] = Field(default_factory=list)
+    notes: List[Claim] = Field(default_factory=list)  # narrative R2 callouts
+    generated_at: Optional[float] = None
+
+
+class ResearchInsight(BaseModel):
+    """One R2 research insight produced by the Research Insight Agent."""
+
+    id: str
+    kind: str  # "trend" | "opportunity" | "method_angle" | "story" | "writing"
+    text: str
+    rationale: Optional[str] = None
+    evidence: List[Evidence] = Field(default_factory=list)
+    reliability: ReliabilityLevel = ReliabilityLevel.R2
+
+
+class ResearchInsightReport(BaseModel):
+    """Aggregated R2 insights for a seed paper or field map."""
+
+    id: str
+    field_map_id: Optional[str] = None
+    seed_paper_id: Optional[str] = None
+    insights: List[ResearchInsight] = Field(default_factory=list)
+    generated_at: Optional[float] = None
+
+
+class AgentTaskKind(str, Enum):
+    REPORT = "report"
+    R1_SEARCH = "r1_search"
+    FIELD_MAP = "field_map"
+    COMPARE = "compare"
+    INSIGHT = "insight"
+    OBSIDIAN = "obsidian"
+    OTHER = "other"
+
+
+class AgentTask(BaseModel):
+    """Persistent record of a long-running task (PRD §8 long-task contract)."""
+
+    id: str
+    kind: AgentTaskKind = AgentTaskKind.OTHER
+    paper_id: Optional[str] = None
+    stage: str = "queued"  # queued | running | completed | failed | cancelled
+    message: str = ""
+    progress: float = 0.0
+    error: Optional[str] = None
+    started_at: Optional[float] = None
+    finished_at: Optional[float] = None
+    result_path: Optional[Path] = None  # path to persisted output, if any
+    retries: int = 0
+
+
 class FieldMap(BaseModel):
     """Aggregated domain-level artifact (PRD §4.8).
 

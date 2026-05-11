@@ -135,6 +135,33 @@ class PaperflowClient:
     async def rerun_field_map(self, field_map_id: str) -> Dict[str, Any]:
         return await self._post(f"/api/field-maps/{field_map_id}/rerun", timeout=120.0)
 
+    async def export_field_map_obsidian(self, field_map_id: str) -> Dict[str, Any]:
+        return await self._post(f"/api/field-maps/{field_map_id}/export-obsidian", timeout=30.0)
+
+    async def generate_insights(self, field_map_id: str) -> Dict[str, Any]:
+        return await self._post(f"/api/field-maps/{field_map_id}/insights", timeout=60.0)
+
+    # ------------------------------------------------------------------ compare (Phase 5)
+
+    async def compare_papers(self, paper_ids: List[str]) -> Dict[str, Any]:
+        return await self._post(
+            "/api/compare", timeout=60.0, json={"paper_ids": paper_ids}
+        )
+
+    # ------------------------------------------------------------------ tasks (Phase 5)
+
+    async def list_tasks(self) -> List[Dict[str, Any]]:
+        return await self._get("/api/tasks")
+
+    async def get_task(self, task_id: str) -> Dict[str, Any]:
+        return await self._get(f"/api/tasks/{task_id}")
+
+    async def cancel_task(self, task_id: str) -> Dict[str, Any]:
+        return await self._post(f"/api/tasks/{task_id}/cancel", timeout=10.0)
+
+    async def retry_task(self, task_id: str) -> Dict[str, Any]:
+        return await self._post(f"/api/tasks/{task_id}/retry", timeout=10.0)
+
     async def import_zotero(self, item_key: Optional[str] = None) -> Dict[str, Any]:
         """Import everything (or one item) from the local Zotero library."""
 

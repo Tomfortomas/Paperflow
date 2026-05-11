@@ -208,6 +208,67 @@ export interface TimelineEvent {
   evidence: Evidence[];
 }
 
+export interface ComparisonCell {
+  paper_id: string;
+  paper_title?: string | null;
+  value?: string | null;
+  evidence: Evidence[];
+  comparison_risk?: string | null;
+}
+
+export interface ComparisonRow {
+  dimension: string;
+  description?: string | null;
+  cells: ComparisonCell[];
+}
+
+export interface ComparisonTable {
+  id: string;
+  paper_ids: string[];
+  dimensions: ComparisonRow[];
+  notes: Claim[];
+  generated_at?: number | null;
+}
+
+export interface ResearchInsight {
+  id: string;
+  kind: "trend" | "opportunity" | "method_angle" | "story" | "writing" | string;
+  text: string;
+  rationale?: string | null;
+  evidence: Evidence[];
+  reliability: ReliabilityLevel;
+}
+
+export interface ResearchInsightReport {
+  id: string;
+  field_map_id?: string | null;
+  seed_paper_id?: string | null;
+  insights: ResearchInsight[];
+  generated_at?: number | null;
+}
+
+export type AgentTaskStage =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | string;
+
+export interface AgentTask {
+  id: string;
+  kind: string;
+  paper_id?: string | null;
+  stage: AgentTaskStage;
+  message: string;
+  progress: number;
+  error?: string | null;
+  started_at?: number | null;
+  finished_at?: number | null;
+  result_path?: string | null;
+  retries: number;
+}
+
 export interface FieldMap {
   id: string;
   seed_paper_id: string;
