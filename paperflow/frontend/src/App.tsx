@@ -28,6 +28,15 @@ const UI_TEXT = {
     importArxiv: "下载并解析",
     arxivQueuedStatus: "arXiv PDF 已开始下载并加入解析队列。",
     emptyArxiv: "请输入 arXiv 链接或 ID。",
+    urlImportTitle: "从 URL 导入",
+    urlPlaceholder: "arXiv / DOI / Semantic Scholar / OpenReview URL 都可识别",
+    importUrl: "解析元数据并下载",
+    urlQueuedStatus: "已识别 URL 元数据，开始下载 PDF。",
+    emptyUrl: "请输入论文 URL 或 DOI。",
+    zoteroImportTitle: "从 Zotero 导入",
+    zoteroImportButton: "导入本地 Zotero 库",
+    zoteroImported: (count: number) => `已从 Zotero 导入 ${count} 篇论文。`,
+    zoteroEmpty: "Zotero 库为空或没有可解析的 PDF 附件。",
     recentPapers: "最近论文",
     notePrefix: "笔记：",
     openPaper: (title: string) => `打开 ${title}`,
@@ -103,6 +112,15 @@ const UI_TEXT = {
     importArxiv: "Download and Parse",
     arxivQueuedStatus: "arXiv PDF download queued for parsing.",
     emptyArxiv: "Enter an arXiv URL or ID.",
+    urlImportTitle: "Import from URL",
+    urlPlaceholder: "arXiv / DOI / Semantic Scholar / OpenReview URL — auto-detected",
+    importUrl: "Fetch metadata and download",
+    urlQueuedStatus: "Metadata fetched, downloading PDF.",
+    emptyUrl: "Enter a paper URL or DOI.",
+    zoteroImportTitle: "Import from Zotero",
+    zoteroImportButton: "Import local Zotero library",
+    zoteroImported: (count: number) => `Imported ${count} papers from Zotero.`,
+    zoteroEmpty: "Zotero library is empty or has no PDF attachments.",
     recentPapers: "Recent Papers",
     notePrefix: "Note:",
     openPaper: (title: string) => `Open ${title}`,
@@ -161,6 +179,7 @@ export function App({
   const [error, setError] = useState<string | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const [arxivInput, setArxivInput] = useState("");
+  const [urlInput, setUrlInput] = useState("");
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
@@ -226,6 +245,47 @@ export function App({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.importFailed);
       setStatus(UI_TEXT.en.importFailed);
+    }
+  }
+
+  async function handleUrlImport() {
+    const value = urlInput.trim();
+    if (!value) {
+      setError(text.emptyUrl);
+      return;
+    }
+    setError(null);
+    setStatus(UI_TEXT.en.urlQueuedStatus);
+    try {
+      const session = await client.importUrl(value);
+      setPapers((current) => [
+        session.paper,
+        ...current.filter((paper) => paper.id !== session.paper.id && paper.title !== session.paper.title),
+      ]);
+      setSelectedPaper(session.paper);
+      setUrlInput("");
+      void pollPaper(session.paper.id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : text.importFailed);
+      setStatus(UI_TEXT.en.importFailed);
+    }
+  }
+
+  async function handleZoteroImport() {
+    setError(null);
+    try {
+      const result = await client.importZotero();
+      if (result.imported === 0) {
+        setStatus(UI_TEXT.en.zoteroEmpty);
+        return;
+      }
+      setStatus(UI_TEXT.en.zoteroImported(result.imported));
+      await refreshLibrary();
+      result.sessions.forEach((session) => {
+        void pollPaper(session.paper.id);
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : text.importFailed);
     }
   }
 
@@ -367,6 +427,30 @@ export function App({
           {text.importArxiv}
         </button>
       </section>
+      <section className="arxiv-import panel">
+        <div>
+          <h2>{text.urlImportTitle}</h2>
+          <p className="muted">{text.urlPlaceholder}</p>
+        </div>
+        <input
+          aria-label={text.urlImportTitle}
+          placeholder={text.urlPlaceholder}
+          value={urlInput}
+          onChange={(event) => setUrlInput(event.target.value)}
+        />
+        <button type="button" onClick={() => void handleUrlImport()}>
+          {text.importUrl}
+        </button>
+      </section>
+      <section className="arxiv-import panel">
+        <div>
+          <h2>{text.zoteroImportTitle}</h2>
+          <p className="muted">~/Zotero/zotero.sqlite</p>
+        </div>
+        <button type="button" onClick={() => void handleZoteroImport()}>
+          {text.zoteroImportButton}
+        </button>
+      </section>
       {error ? <p className="warning">{error}</p> : null}
 
       <section className="library-grid">
@@ -375,7 +459,8 @@ export function App({
             <article className="paper-card" key={paper.id}>
               <div>
                 <h2>{paper.title}</h2>
-                <p>{paper.pdf_path}</p>
+                <PaperMetadataChips paper={paper} />
+                <p className="muted">{paper.pdf_path}</p>
                 <StatusBadge locale={locale} status={paper.status} />
                 {paper.note_path ? <p className="muted">{text.notePrefix} {paper.note_path}</p> : null}
               </div>
@@ -668,6 +753,46 @@ function StatusBadge({ status, locale }: { status?: TaskStatus; locale: Locale }
   const stage = status?.stage ?? "unknown";
   const text = UI_TEXT[locale];
   return <span className={`status-badge ${stage}`}>{text.statusLabels[stage as keyof typeof text.statusLabels] ?? stage}</span>;
+}
+
+function PaperMetadataChips({ paper }: { paper: Paper }) {
+  const metadata = paper.metadata ?? null;
+  if (!metadata) {
+    return null;
+  }
+  const chips: { key: string; label: string }[] = [];
+  const authors = metadata.authors ?? [];
+  if (authors.length > 0) {
+    const head = authors.slice(0, 3).join(", ");
+    chips.push({ key: "authors", label: authors.length > 3 ? `${head}, …` : head });
+  }
+  if (metadata.year) {
+    chips.push({ key: "year", label: String(metadata.year) });
+  }
+  if (metadata.venue) {
+    chips.push({ key: "venue", label: metadata.venue });
+  }
+  if (metadata.arxiv_id) {
+    chips.push({ key: "arxiv", label: `arXiv:${metadata.arxiv_id}` });
+  }
+  if (metadata.doi) {
+    chips.push({ key: "doi", label: `DOI:${metadata.doi}` });
+  }
+  if (metadata.source_type && metadata.source_type !== "local_pdf") {
+    chips.push({ key: "source", label: metadata.source_type });
+  }
+  if (chips.length === 0) {
+    return null;
+  }
+  return (
+    <p className="meta-chips">
+      {chips.map((chip) => (
+        <span key={chip.key} className={`meta-chip meta-chip-${chip.key}`}>
+          {chip.label}
+        </span>
+      ))}
+    </p>
+  );
 }
 
 function readInitialLocale(): Locale {

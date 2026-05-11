@@ -261,3 +261,39 @@ button {
 .side-card button {
   margin-top: 0.75rem;
 }
+
+.meta-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.4rem 0 0.6rem;
+}
+
+.meta-chip {
+  background: #f3ead4;
+  border: 1px solid #d6c7ad;
+  border-radius: 999px;
+  color: #514430;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.6rem;
+}
+
+.meta-chip-arxiv {
+  background: #fef3c7;
+  border-color: #f6c560;
+  color: #845109;
+}
+
+.meta-chip-doi {
+  background: #eef2ff;
+  border-color: #b7c4ff;
+  color: #1e3a8a;
+}
+
+.meta-chip-source {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #065f46;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}

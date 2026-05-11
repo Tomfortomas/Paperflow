@@ -1,9 +1,21 @@
-import type { AgentStatus, Claim, Paper, PaperSession, ReadingReport, TaskStatus } from "./types";
+import type {
+  AgentStatus,
+  Claim,
+  Paper,
+  PaperSession,
+  ReadingReport,
+  TaskStatus,
+  ZoteroImportResult,
+  ZoteroPreviewItem,
+} from "./types";
 
 export interface PaperflowClient {
   listPapers(): Promise<Paper[]>;
   importPaper(file: File): Promise<PaperSession>;
   importArxiv(url: string): Promise<PaperSession>;
+  importUrl(url: string): Promise<PaperSession>;
+  importZotero(itemKey?: string): Promise<ZoteroImportResult>;
+  previewZotero(): Promise<ZoteroPreviewItem[]>;
   getStatus(paperId: string): Promise<TaskStatus>;
   getReport(paperId: string): Promise<ReadingReport>;
   askPaper(paperId: string, question: string): Promise<Claim>;
@@ -35,6 +47,23 @@ export function createPaperflowClient(baseUrl = "http://127.0.0.1:8000"): Paperf
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
       });
+    },
+    async importUrl(url: string) {
+      return request<PaperSession>(`${baseUrl}/api/papers/import-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+    },
+    async importZotero(itemKey?: string) {
+      return request<ZoteroImportResult>(`${baseUrl}/api/papers/import-zotero`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_key: itemKey ?? null }),
+      });
+    },
+    async previewZotero() {
+      return request<ZoteroPreviewItem[]>(`${baseUrl}/api/zotero/preview`);
     },
     async getReport(paperId: string) {
       return request<ReadingReport>(`${baseUrl}/api/papers/${paperId}/report`);

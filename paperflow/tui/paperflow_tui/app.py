@@ -144,6 +144,35 @@ class ImportArxivScreen(ModalScreen[Optional[str]]):
         self.dismiss(value or None)
 
 
+class ImportUrlScreen(ModalScreen[Optional[str]]):
+    """Prompt for any auto-classified URL (arXiv / DOI / S2 / OpenReview)."""
+
+    BINDINGS = [
+        Binding("escape", "dismiss(None)", "Cancel", show=True),
+        Binding("enter", "submit", "Import", show=True),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="modal-box"):
+            yield Label("Import paper URL or DOI", id="modal-title")
+            yield Label(
+                "arXiv / DOI / Semantic Scholar / OpenReview — Paperflow detects the right source.",
+                id="modal-hint",
+            )
+            yield Input(placeholder="https://… or 10.x/…", id="url-input")
+
+    def on_mount(self) -> None:
+        self.query_one("#url-input", Input).focus()
+
+    @on(Input.Submitted)
+    def _on_submit(self, event: Input.Submitted) -> None:
+        self.action_submit()
+
+    def action_submit(self) -> None:
+        value = self.query_one("#url-input", Input).value.strip()
+        self.dismiss(value or None)
+
+
 class AskScreen(ModalScreen[Optional[str]]):
     """Prompt for a focused question."""
 
@@ -182,6 +211,8 @@ class LibraryScreen(Screen):
     BINDINGS = [
         Binding("i", "import_pdf", "Import PDF", show=True),
         Binding("a", "import_arxiv", "Import arXiv", show=True),
+        Binding("u", "import_url", "Import URL", show=True),
+        Binding("z", "import_zotero", "Zotero", show=True),
         Binding("o,enter", "open_paper", "Open", show=True),
         Binding("r", "rerun", "Rerun Agent", show=True),
         Binding("R", "refresh", "Refresh", show=True),
@@ -192,7 +223,7 @@ class LibraryScreen(Screen):
         yield Header(show_clock=True)
         yield Static("", id="header-bar")
         table = DataTable(id="library-table", zebra_stripes=True, cursor_type="row")
-        table.add_columns("ID", "Title", "Status", "Note")
+        table.add_columns("ID", "Title", "Authors", "Year", "Venue", "Source", "Status", "Note")
         yield table
         yield Static("", id="status-bar")
         yield Footer()
@@ -226,7 +257,10 @@ class LibraryScreen(Screen):
         text.append("Backend: ", style="bold")
         text.append(base_url, style="cyan")
         text.append("   ")
-        text.append("[i] Import PDF  [a] Import arXiv  [o] Open  [r] Rerun  [R] Refresh  [q] Quit", style="dim")
+        text.append(
+            "[i] PDF  [a] arXiv  [u] URL/DOI  [z] Zotero  [o] Open  [r] Rerun  [R] Refresh  [q] Quit",
+            style="dim",
+        )
         return text
 
     async def _poll_library(self) -> None:
@@ -248,10 +282,35 @@ class LibraryScreen(Screen):
             paper_id = str(paper.get("id", ""))
             short_id = paper_id[:8] if paper_id else "—"
             title = str(paper.get("title") or "(untitled)")
+            metadata = paper.get("metadata") or {}
+            authors = metadata.get("authors") or []
+            if isinstance(authors, list) and authors:
+                authors_label = ", ".join(authors[:2]) + ("…" if len(authors) > 2 else "")
+            else:
+                authors_label = "—"
+            year_label = str(metadata.get("year") or "—")
+            venue_label = str(metadata.get("venue") or "—")
+            source_type = metadata.get("source_type") or "—"
+            external_id = (
+                f"arXiv:{metadata.get('arxiv_id')}"
+                if metadata.get("arxiv_id")
+                else (f"DOI:{metadata.get('doi')}" if metadata.get("doi") else None)
+            )
+            source_label = external_id or str(source_type)
             status = paper.get("status") or {}
             stage = str(status.get("stage", "unknown"))
             note = "✓" if paper.get("note_path") else "—"
-            table.add_row(short_id, title, stage_badge(stage), note, key=paper_id)
+            table.add_row(
+                short_id,
+                title,
+                authors_label,
+                year_label,
+                venue_label,
+                source_label,
+                stage_badge(stage),
+                note,
+                key=paper_id,
+            )
         try:
             if cursor_row < table.row_count:
                 table.move_cursor(row=cursor_row)
@@ -305,6 +364,39 @@ class LibraryScreen(Screen):
         self._set_status(
             Text(f"Imported {value} → paper id {session.get('paper', {}).get('id', '?')[:8]}…", style="green")
         )
+        await self.refresh_library()
+
+    async def action_import_url(self) -> None:
+        value = await self.app.push_screen_wait(ImportUrlScreen())
+        if not value:
+            return
+        self._set_status(Text(f"Fetching metadata for {value} …", style="yellow"))
+        try:
+            session = await self.app.client.import_url(value)
+        except PaperflowAPIError as exc:
+            self._set_status(Text(str(exc), style="bold red"))
+            return
+        self._set_status(
+            Text(
+                f"Imported {session.get('paper', {}).get('title') or value} "
+                f"({session.get('paper', {}).get('id', '?')[:8]}…)",
+                style="green",
+            )
+        )
+        await self.refresh_library()
+
+    async def action_import_zotero(self) -> None:
+        self._set_status(Text("Reading local Zotero library …", style="yellow"))
+        try:
+            result = await self.app.client.import_zotero()
+        except PaperflowAPIError as exc:
+            self._set_status(Text(str(exc), style="bold red"))
+            return
+        imported = int(result.get("imported", 0))
+        if imported == 0:
+            self._set_status(Text("Zotero library is empty or has no PDF attachments.", style="yellow"))
+            return
+        self._set_status(Text(f"Imported {imported} papers from Zotero.", style="green"))
         await self.refresh_library()
 
     async def action_open_paper(self) -> None:

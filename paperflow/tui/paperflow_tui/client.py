@@ -100,6 +100,30 @@ class PaperflowClient:
             timeout=120.0,
         )
 
+    async def import_url(self, url: str) -> Dict[str, Any]:
+        """Import any URL Paperflow can auto-classify (arXiv/DOI/S2/OpenReview)."""
+
+        return await self._post(
+            "/api/papers/import-url",
+            json={"url": url.strip()},
+            timeout=120.0,
+        )
+
+    async def import_zotero(self, item_key: Optional[str] = None) -> Dict[str, Any]:
+        """Import everything (or one item) from the local Zotero library."""
+
+        payload: Dict[str, Any] = {}
+        if item_key:
+            payload["item_key"] = item_key
+        return await self._post(
+            "/api/papers/import-zotero",
+            json=payload,
+            timeout=300.0,
+        )
+
+    async def preview_zotero(self) -> List[Dict[str, Any]]:
+        return await self._get("/api/zotero/preview")
+
     # ------------------------------------------------------------------ agent ops
 
     async def rerun(self, paper_id: str) -> Dict[str, Any]:

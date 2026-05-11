@@ -5,7 +5,8 @@ import time
 from fastapi.testclient import TestClient
 
 from app.main import create_app, extract_arxiv_id
-from app.models import ReadingReport
+from app.metadata import MetadataError
+from app.models import ImportSourceType, PaperMetadata, ReadingReport
 from app.report_service import ReportService
 from tests.test_core_pipeline import FakePaperAgent
 
@@ -46,14 +47,17 @@ def test_import_lists_reads_asks_and_exports_note(tmp_path: Path) -> None:
     assert Path(note["note_path"]).exists()
 
 
-def test_reimport_same_filename_replaces_old_library_entry(tmp_path: Path) -> None:
+def test_reimport_same_content_replaces_old_library_entry(tmp_path: Path) -> None:
+    """Phase 2: identical PDF bytes should dedup via content_hash."""
+
     app = create_app(tmp_path / "data", report_service=ReportService(agent=FakePaperAgent()))
     client = TestClient(app)
 
-    for content in [b"Abstract: first", b"Abstract: second"]:
+    payload = b"Abstract: identical bytes"
+    for _ in range(2):
         response = client.post(
             "/api/papers/import",
-            files={"file": ("same-paper.pdf", content, "application/pdf")},
+            files={"file": ("same-paper.pdf", payload, "application/pdf")},
         )
         assert response.status_code == 200
         wait_for_status(client, response.json()["paper"]["id"], "completed")
@@ -61,6 +65,27 @@ def test_reimport_same_filename_replaces_old_library_entry(tmp_path: Path) -> No
     library = client.get("/api/papers").json()
 
     assert [paper["title"] for paper in library] == ["Actual Paper Title"]
+    assert library[0]["metadata"]["content_hash"]
+
+
+def test_reimport_different_bytes_with_same_filename_keeps_both(tmp_path: Path) -> None:
+    """Phase 2: distinct content_hashes should *not* dedup, even if filenames match."""
+
+    app = create_app(tmp_path / "data", report_service=ReportService(agent=FakePaperAgent()))
+    client = TestClient(app)
+
+    for content in [b"Abstract: first", b"Abstract: second"]:
+        response = client.post(
+            "/api/papers/import",
+            files={"file": ("same-name.pdf", content, "application/pdf")},
+        )
+        assert response.status_code == 200
+        wait_for_status(client, response.json()["paper"]["id"], "completed")
+
+    library = client.get("/api/papers").json()
+    assert len(library) == 2
+    hashes = {paper["metadata"]["content_hash"] for paper in library}
+    assert len(hashes) == 2
 
 
 def test_report_persists_after_app_restart(tmp_path: Path) -> None:
@@ -128,7 +153,7 @@ def test_missing_agent_configuration_surfaces_failed_status(tmp_path: Path, monk
     assert wait_for_status(client, paper_id, "failed")["message"].startswith("Agent not configured")
 
 
-def test_import_arxiv_downloads_pdf_and_queues_agent(tmp_path: Path, monkeypatch) -> None:
+def test_import_arxiv_uses_real_metadata_when_available(tmp_path: Path, monkeypatch) -> None:
     captured = {}
 
     def fake_get(url, follow_redirects, timeout):
@@ -138,6 +163,18 @@ def test_import_arxiv_downloads_pdf_and_queues_agent(tmp_path: Path, monkeypatch
         return FakeDownloadResponse(b"%PDF-1.4\nAbstract: arXiv paper")
 
     monkeypatch.setattr("app.main.httpx.get", fake_get)
+    monkeypatch.setattr(
+        "app.main.fetch_metadata_from_url",
+        lambda _identifier: PaperMetadata(
+            title="Stubbed arXiv Title",
+            authors=["Alice Liu", "Bob Chen"],
+            year=2025,
+            venue="arXiv",
+            arxiv_id="2605.08063v1",
+            source_type=ImportSourceType.ARXIV,
+            source_url="https://arxiv.org/abs/2605.08063v1",
+        ),
+    )
     app = create_app(tmp_path / "data", report_service=ReportService(agent=FakePaperAgent()))
     client = TestClient(app)
 
@@ -146,8 +183,78 @@ def test_import_arxiv_downloads_pdf_and_queues_agent(tmp_path: Path, monkeypatch
 
     assert response.status_code == 200
     assert captured["url"] == "https://arxiv.org/pdf/2605.08063v1.pdf"
-    assert response.json()["paper"]["title"] == "arxiv-2605.08063v1"
+    paper = response.json()["paper"]
+    assert paper["title"] == "Stubbed arXiv Title"
+    assert paper["metadata"]["authors"] == ["Alice Liu", "Bob Chen"]
+    assert paper["metadata"]["arxiv_id"] == "2605.08063v1"
+    assert paper["metadata"]["source_type"] == "arxiv"
     assert wait_for_status(client, paper_id, "completed")["stage"] == "completed"
+
+
+def test_import_arxiv_falls_back_when_metadata_unavailable(tmp_path: Path, monkeypatch) -> None:
+    def fake_get(url, follow_redirects, timeout):
+        return FakeDownloadResponse(b"%PDF-1.4\nAbstract: arXiv paper")
+
+    def fake_fetch(_identifier):
+        raise MetadataError("upstream offline")
+
+    monkeypatch.setattr("app.main.httpx.get", fake_get)
+    monkeypatch.setattr("app.main.fetch_metadata_from_url", fake_fetch)
+    app = create_app(tmp_path / "data", report_service=ReportService(agent=FakePaperAgent()))
+    client = TestClient(app)
+
+    response = client.post("/api/papers/import-arxiv", json={"url": "https://arxiv.org/abs/2605.08063v1"})
+    paper = response.json()["paper"]
+    assert response.status_code == 200
+    assert paper["title"] == "arxiv-2605.08063v1"
+    assert paper["metadata"]["arxiv_id"] == "2605.08063v1"
+    assert paper["metadata"]["source_type"] == "arxiv"
+
+
+def test_import_url_routes_to_metadata_then_downloads_pdf(tmp_path: Path, monkeypatch) -> None:
+    def fake_get(url, follow_redirects, timeout):
+        return FakeDownloadResponse(b"%PDF-1.4\nAbstract: url import")
+
+    monkeypatch.setattr("app.main.httpx.get", fake_get)
+    monkeypatch.setattr(
+        "app.main.fetch_metadata_from_url",
+        lambda _u: PaperMetadata(
+            title="Imported via URL",
+            arxiv_id="2401.99999",
+            source_type=ImportSourceType.ARXIV,
+        ),
+    )
+    app = create_app(tmp_path / "data", report_service=ReportService(agent=FakePaperAgent()))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import-url",
+        json={"url": "https://arxiv.org/abs/2401.99999"},
+    )
+    assert response.status_code == 200
+    paper = response.json()["paper"]
+    assert paper["title"] == "Imported via URL"
+    assert paper["metadata"]["arxiv_id"] == "2401.99999"
+
+
+def test_import_url_rejects_doi_when_no_pdf_url_inferable(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.main.fetch_metadata_from_url",
+        lambda _u: PaperMetadata(
+            title="DOI-only paper",
+            doi="10.1234/no-pdf",
+            source_type=ImportSourceType.DOI,
+        ),
+    )
+    app = create_app(tmp_path / "data", report_service=ReportService(agent=FakePaperAgent()))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import-url",
+        json={"url": "https://doi.org/10.1234/no-pdf"},
+    )
+    assert response.status_code == 400
+    assert "cannot infer a PDF URL" in response.json()["detail"]
 
 
 def test_extract_arxiv_id_accepts_common_forms() -> None:

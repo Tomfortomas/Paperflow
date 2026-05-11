@@ -56,17 +56,15 @@ V1.1 workbench features:
 - Background agent task (no UI blocking on import)
 - Persistent report — survives backend restart
 - Obsidian-native paper note (frontmatter, wikilinks, callouts, reliability tags)
-- De-dup by filename / arXiv ID — re-import replaces in place
 - Focused Q&A around dataset / benchmark / method / compute / limitations
 
-Planned next:
+V2 progress (in active rollout):
 
-- Full PDF.js viewer with evidence highlight + page jump
-- Real R1 search over Semantic Scholar / OpenAlex / Papers with Code
-- Milestone papers + technology timeline
-- Field Map workspace (problem ↔ method ↔ dataset ↔ benchmark ↔ open problems)
-- Multi-paper compare with comparison-risk warning
-- R2 research insight & opportunity surface
+- [x] **Phase 2 — Metadata & Import**: real `authors / year / venue / DOI / arXiv ID` populated via arXiv, CrossRef, Semantic Scholar, OpenReview APIs; new `POST /api/papers/import-url` auto-detects source; read-only Zotero importer (`POST /api/papers/import-zotero`); content-hash + DOI + arXiv-ID dedup; metadata chips on Library cards (web + TUI)
+- [ ] **Phase 1 — Evidence Workflow**: PDF.js viewer + page jump + quote fuzzy-match + bbox highlight + select-to-ask
+- [ ] **Phase 3 — Real R1 Search**: Semantic Scholar references/citations, OpenAlex fallback, Papers with Code, query trace + comparison risk
+- [ ] **Phase 4 — Field Map**: milestone detection, technology timeline, task / dataset / method / open problems aggregator
+- [ ] **Phase 5 — Compare + R2 + Cancel/Retry/Resume**: multi-paper compare, Research Insight Agent (R2), task queue lifecycle
 
 ---
 
