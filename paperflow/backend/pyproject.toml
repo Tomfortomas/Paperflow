@@ -1,0 +1,22 @@
+[project]
+name = "paperflow-backend"
+version = "0.1.0"
+description = "Paperflow V1 backend"
+requires-python = ">=3.9"
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "pydantic",
+  "python-multipart",
+  "PyMuPDF",
+  "httpx",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
