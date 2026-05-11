@@ -7,7 +7,8 @@
 A local-first paper-reading workbench for AI researchers and engineers.
 Powered by DeepSeek-backed agents — every claim is graded **R0 / R1 / R2** and can be traced back to the PDF.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-red.svg)](./LICENSE)
+[![Research-only](https://img.shields.io/badge/use-research%20only-orange.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)](https://react.dev/)
@@ -262,7 +263,18 @@ Please keep PRs aligned with the reliability contract: every UI surface that pro
 
 ## License
 
-[MIT](./LICENSE) © 2026 shiml20 and PaperFlow contributors.
+PaperFlow is released under the [**PolyForm Noncommercial License 1.0.0**](./LICENSE).
+
+This means:
+
+- **You may freely use, copy, modify, and distribute PaperFlow** for any **noncommercial** purpose — including academic research, teaching, personal study, hobby projects, and use inside charitable, educational, government, or public research organizations.
+- **You may not use PaperFlow for any commercial purpose** — including but not limited to: hosting it as a paid service, embedding it inside a commercial product, or using it as part of a for-profit company's internal tooling — without a separate commercial license.
+- Forks and derivative works must keep this license and the `Required Notice` line that appears at the top of [`LICENSE`](./LICENSE).
+- The software is provided **as is**, without warranty of any kind.
+
+If you would like to use PaperFlow commercially, please open an issue on the [GitHub repository](https://github.com/shiml20/PaperFlow) to discuss a commercial license.
+
+Copyright © 2026 shiml20 and PaperFlow contributors.
 
 ---
 
