@@ -5,7 +5,7 @@
 **Evidence-first paper reading + citation-aware search + field map + Obsidian knowledge base.**
 
 A local-first paper-reading workbench for AI researchers and engineers.
-Powered by DeepSeek-backed agents, every claim is graded R0 / R1 / R2 and can be traced back to the PDF.
+Powered by DeepSeek-backed agents — every claim is graded **R0 / R1 / R2** and can be traced back to the PDF.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
@@ -20,12 +20,12 @@ Powered by DeepSeek-backed agents, every claim is graded R0 / R1 / R2 and can be
 
 ## Why PaperFlow
 
-Reading papers as a researcher is not a one-shot summarization task. It is a continuous workflow of:
+Reading papers is not a one-shot summarization task. It is a continuous workflow of:
 
 - judging the task, dataset, benchmark, model and compute behind a paper,
 - backtracking each conclusion to the exact place in the PDF,
-- walking out from one paper to its references, cited-by, related work and field map,
-- and saving the result into a personal knowledge base you can keep extending.
+- walking out from one paper to its references, cited-by and related work,
+- saving the result into a personal knowledge base you can keep extending.
 
 **PaperFlow turns that workflow into a local-first, evidence-graded research IDE.**
 
@@ -34,33 +34,33 @@ It is opinionated:
 - **Report first, chat second.** You open a paper and see a structured Reading Report, not a blank chatbox.
 - **Every claim is graded.** R0 = grounded in the current paper, R1 = grounded in external papers, R2 = inference / opinion. The grade is a first-class citizen of the UI, the data model, and the Obsidian export.
 - **Evidence is the product.** Every fact tries to carry a quote, page and section — and tries to jump back into the PDF.
-- **Local-first knowledge base.** PDFs, report JSON, Markdown notes and Field Map JSON all live on your disk and sync to an Obsidian-friendly vault.
+- **Local-first knowledge base.** PDFs, report JSON, and Markdown notes live on your disk and sync to an Obsidian-friendly vault.
 
 ---
 
-## Highlights
+## Status
 
-| Capability | Status |
-| --- | --- |
-| Import local PDFs and arXiv URLs/IDs | Shipped (V1 / V1.1) |
-| DeepSeek-backed PaperAgent generating R0 Reading Report | Shipped (V1) |
-| R0 / R1 / R2 reliability badges in UI and data model | Shipped (V1) |
-| Evidence quote, page and section per claim | Shipped (V1) |
-| Library-first home with status tracking (`queued` → `processing` → `completed` / `failed`) | Shipped (V1.1) |
-| Two-column Report-first Workspace | Shipped (V1.1) |
-| Background agent task, no UI blocking on import | Shipped (V1.1) |
-| Persistent report — survives backend restart | Shipped (V1.1) |
-| Obsidian-native paper note (frontmatter, wikilinks, callouts, reliability tags) | Shipped (V1.1) |
-| De-dup by filename / arXiv ID — re-import replaces in place | Shipped (V1.1) |
-| Focused Q&A around dataset / benchmark / method / compute / limitations | Shipped (V1.1) |
-| Full PDF.js viewer with evidence highlight + page jump | Planned (V2 Phase 1) |
-| Real R1 search over Semantic Scholar / OpenAlex / Papers with Code | Planned (V2 Phase 3) |
-| Milestone papers + technology timeline | Planned (V2 Phase 4) |
-| Field Map workspace (problem ↔ method ↔ dataset ↔ benchmark ↔ open problems) | Planned (V2 Phase 4) |
-| Multi-paper compare with comparison-risk warning | Planned (V2 Phase 5) |
-| R2 research insight & opportunity surface | Planned (V2 Phase 5) |
+PaperFlow currently ships the **V1.1** workbench:
 
-For the full V2 design contract see [`Paperflow_V2_PRD.md`](./Paperflow_V2_PRD.md).
+- Library-first home with status tracking (`queued` → `processing` → `completed` / `failed`)
+- DeepSeek-backed PaperAgent generating R0 Reading Reports
+- R0 / R1 / R2 reliability badges in UI and data model
+- Evidence quote, page and section per claim
+- Two-column Report-first Workspace with Evidence Detail side panel
+- Background agent task (no UI blocking on import)
+- Persistent report — survives backend restart
+- Obsidian-native paper note (frontmatter, wikilinks, callouts, reliability tags)
+- De-dup by filename / arXiv ID — re-import replaces in place
+- Focused Q&A around dataset / benchmark / method / compute / limitations
+
+Planned next:
+
+- Full PDF.js viewer with evidence highlight + page jump
+- Real R1 search over Semantic Scholar / OpenAlex / Papers with Code
+- Milestone papers + technology timeline
+- Field Map workspace (problem ↔ method ↔ dataset ↔ benchmark ↔ open problems)
+- Multi-paper compare with comparison-risk warning
+- R2 research insight & opportunity surface
 
 ---
 
@@ -198,27 +198,7 @@ Every R0 claim looks like:
 }
 ```
 
-A full Reading Report covers: paper metadata, executive summary, task, dataset, benchmark/metric, method, model scale, input/output, compute/training, key results, strengths, limitations, related-work claims, theory/methodology insights, and an evidence index. See [`Paperflow_V2_PRD.md` §4.3](./Paperflow_V2_PRD.md) for the canonical schema.
-
----
-
-## Roadmap
-
-PaperFlow ships through three PRD generations:
-
-- **V1 — [`Paperflow_V1_PRD.md`](./Paperflow_V1_PRD.md)** — Library-first home, evidence-aware R0 Reading Report, lightweight R1 context, Obsidian-native note. *Shipped.*
-- **V1.1 — [`Paperflow_V1_1_PRD.md`](./Paperflow_V1_1_PRD.md)** — Two-column Report-first Workspace, durable storage, background tasks, status badges, agent config surface. *Shipped.*
-- **V2 — [`Paperflow_V2_PRD.md`](./Paperflow_V2_PRD.md)** — Full PDF evidence workflow, real R1 over Semantic Scholar / OpenAlex / Papers with Code, milestone detection, technology timeline, Field Map workspace, multi-paper compare, R2 research insight. *In progress.*
-
-V2 is planned in five phases:
-
-1. **Evidence workflow** — PDF.js reader, quote fuzzy match, evidence highlight, selection-driven Q&A.
-2. **Metadata & import** — arXiv, DOI, Semantic Scholar, OpenReview, Zotero read-only.
-3. **Real R1 search** — references parser, Semantic Scholar references/citations, OpenAlex fallback, Papers with Code, comparison-risk surfacing.
-4. **Field Map** — milestone detection, timeline, method families, dataset/benchmark table, open problems, Field Map Workspace.
-5. **Knowledge base & R2** — Obsidian vault sync, Field Map note, multi-paper compare, research opportunities, user curation.
-
-Original product thinking and traceability back to first principles live in [`SMLThoughts.md`](./SMLThoughts.md), [`SMLThoughts_V1_status.md`](./SMLThoughts_V1_status.md) and [`SMLThoughts_with_suggestions.md`](./SMLThoughts_with_suggestions.md).
+A full Reading Report covers: paper metadata, executive summary, task, dataset, benchmark/metric, method, model scale, input/output, compute/training, key results, strengths, limitations, related-work claims, theory/methodology insights, and an evidence index.
 
 ---
 
@@ -228,13 +208,7 @@ Original product thinking and traceability back to first principles live in [`SM
 PaperFlow/
 ├── README.md                            ← you are here
 ├── LICENSE                              ← MIT
-├── Paperflow_V1_PRD.md                  ← V1 product spec  (shipped)
-├── Paperflow_V1_1_PRD.md                ← V1.1 product spec (shipped)
-├── Paperflow_V2_PRD.md                  ← V2 product spec  (in progress, locked design)
-├── Paperflow_V1_IMPLEMENTATION_PLAN.md  ← V1 task plan
-├── SMLThoughts.md                       ← original requirements
-├── SMLThoughts_V1_status.md             ← V1 coverage of original requirements
-├── SMLThoughts_with_suggestions.md      ← annotated requirements
+├── .gitignore
 └── paperflow/                           ← runnable V1.1 implementation
     ├── README.md
     ├── backend/                         ← FastAPI + PaperAgent
@@ -268,9 +242,9 @@ If none of those provide a key, the backend reports `agent.status = "missing-key
 PaperFlow is early but the contract is stable. Good first contributions:
 
 - Improve PDF parsing fidelity (sections, tables, references).
-- Wire one of the V2 external sources (Semantic Scholar, OpenAlex, Papers with Code) end-to-end.
+- Wire one of the external sources (Semantic Scholar, OpenAlex, Papers with Code) end-to-end.
 - Extend the Obsidian renderer (Field Map note, R2 callout, citation graph links).
-- Add end-to-end tests for the V1.1 import → report → focused-question → Obsidian flow.
+- Add end-to-end tests for the import → report → focused-question → Obsidian flow.
 
 Before opening a PR:
 
@@ -294,7 +268,6 @@ Please keep PRs aligned with the reliability contract: every UI surface that pro
 
 ## Acknowledgements
 
-- The reliability grading model (R0 / R1 / R2) and the field-map framing originated in [`SMLThoughts.md`](./SMLThoughts.md).
 - Agent integration is built against the DeepSeek API and reuses configuration written by the DeepSeek-TUI CLI when present.
 - PDF parsing is powered by [PyMuPDF](https://github.com/pymupdf/PyMuPDF).
 - The frontend is built with [Vite](https://vitejs.dev/) and [React](https://react.dev/).
