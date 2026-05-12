@@ -5,13 +5,41 @@ import time
 import httpx
 from fastapi.testclient import TestClient
 
-from app.main import create_app, extract_arxiv_id
+from app.main import DEFAULT_STORAGE_ROOT, _resolve_storage_root, create_app, extract_arxiv_id
 from app.deepseek import set_report_read_timeout_seconds
 from app.metadata import MetadataError
 from app.models import ImportSourceType, PaperMetadata, ReadingReport, TaskStatus
 from app.report_service import ReportService
 from app.storage import PaperStorage
+from app.web_search import WebSearchResult
 from tests.test_core_pipeline import FakePaperAgent
+
+
+class FakeWebSearch:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def search(self, query: str, limit: int = 5) -> list[WebSearchResult]:
+        self.queries.append(query)
+        return [
+            WebSearchResult(
+                title="Reinforcement learning overview",
+                url="https://example.com/rl",
+                snippet="RL learns actions from rewards.",
+            )
+        ][:limit]
+
+
+def test_default_storage_root_is_project_level_data(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("PAPERFLOW_DATA_DIR", raising=False)
+
+    assert _resolve_storage_root(None) == DEFAULT_STORAGE_ROOT
+
+    custom_root = tmp_path / "custom-data"
+    monkeypatch.setenv("PAPERFLOW_DATA_DIR", str(custom_root))
+
+    assert _resolve_storage_root(None) == custom_root
+    assert _resolve_storage_root(tmp_path / "explicit") == tmp_path / "explicit"
 
 
 def test_import_lists_reads_asks_and_exports_note(tmp_path: Path) -> None:
@@ -81,6 +109,7 @@ def test_chat_returns_transcript_steps_and_evidence(tmp_path: Path) -> None:
         "Read report",
         "Locate evidence",
         "Check R1 context",
+        "Web search",
         "Compose answer",
         "Persist transcript",
     ]
@@ -97,6 +126,32 @@ def test_chat_returns_transcript_steps_and_evidence(tmp_path: Path) -> None:
 
     tasks = client.get("/api/tasks").json()
     assert any(task["kind"] == "chat" and task["paper_id"] == paper_id for task in tasks)
+
+
+def test_chat_auto_web_searches_for_broad_questions(tmp_path: Path) -> None:
+    web = FakeWebSearch()
+    app = create_app(
+        tmp_path / "data",
+        report_service=ReportService(agent=FakePaperAgent()),
+        web_search_client=web,
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("paper.pdf", b"Abstract: A paper reading IDE.", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+    wait_for_status(client, paper_id, "completed")
+
+    chat = client.post(f"/api/papers/{paper_id}/chat", json={"question": "请介绍一下什么是强化学习"})
+
+    assert chat.status_code == 200
+    payload = chat.json()
+    assert web.queries
+    assert "web_search" in payload["used_context"]
+    assert any(step["label"] == "Web search" and step["status"] == "completed" for step in payload["steps"])
+    assert payload["answer"]["evidence"][0]["source"] == "https://example.com/rl"
 
 
 def test_chat_stream_returns_step_and_final_events(tmp_path: Path) -> None:

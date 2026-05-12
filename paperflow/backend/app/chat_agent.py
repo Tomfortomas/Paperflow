@@ -11,6 +11,7 @@ from app.deepseek import DeepSeekClient
 from app.models import (
     Claim,
     Evidence,
+    EvidenceLocationStatus,
     PaperChatMessage,
     PaperChatRequest,
     PaperChatResponse,
@@ -18,6 +19,7 @@ from app.models import (
     ReadingReport,
     ReliabilityLevel,
 )
+from app.web_search import WebSearchResult
 
 
 def generate_chat_response(
@@ -29,14 +31,52 @@ def generate_chat_response(
     report: ReadingReport,
     r1_cache: Optional[dict] = None,
     client: Optional[DeepSeekClient] = None,
+    web_search_client: Optional[object] = None,
+    web_search_limit: int = 5,
+    web_search_mode: str = "auto",
 ) -> PaperChatResponse:
-    steps = _base_steps(report, r1_cache)
     selected = _selected_evidence(report, request)
     used_context = ["report"]
     if selected:
         used_context.append("selected_evidence")
     if r1_cache and r1_cache.get("items"):
         used_context.append("r1_cache")
+
+    web_results: list[WebSearchResult] = []
+    web_step_status = "skipped"
+    web_step_detail = "Local report / R1 context looked sufficient."
+    if _should_web_search(
+        question=question,
+        request=request,
+        report=report,
+        r1_cache=r1_cache,
+        selected=selected,
+        mode=web_search_mode,
+    ):
+        if web_search_client is None:
+            web_step_detail = "Web search is enabled but no search client is configured."
+        else:
+            try:
+                search = getattr(web_search_client, "search")
+                web_results = list(search(_web_search_query(question, report), limit=web_search_limit))
+                web_step_status = "completed"
+                web_step_detail = (
+                    f"Found {len(web_results)} web result(s)."
+                    if web_results
+                    else "Searched the web but found no usable results."
+                )
+                if web_results:
+                    used_context.append("web_search")
+            except Exception as exc:
+                web_step_status = "failed"
+                web_step_detail = f"Web search failed; continued with local context: {exc}"
+
+    steps = _base_steps(
+        report,
+        r1_cache,
+        web_step_status=web_step_status,
+        web_step_detail=web_step_detail,
+    )
 
     if client is not None:
         try:
@@ -47,14 +87,15 @@ def generate_chat_response(
                 report=report,
                 r1_cache=r1_cache,
                 selected=selected,
+                web_results=web_results,
             )
         except Exception as exc:
-            answer = _fallback_answer(report, request, question)
+            answer = _fallback_answer(report, request, question, web_results=web_results)
             answer.uncertainty = (
                 f"DeepSeek chat failed, so Paperflow fell back to report-grounded retrieval: {exc}"
             )
     else:
-        answer = _fallback_answer(report, request, question)
+        answer = _fallback_answer(report, request, question, web_results=web_results)
 
     turn_id = f"turn-{uuid.uuid4().hex[:10]}"
     return PaperChatResponse(
@@ -86,7 +127,13 @@ def sse_event(event: str, payload: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _base_steps(report: ReadingReport, r1_cache: Optional[dict]) -> list[PaperChatStep]:
+def _base_steps(
+    report: ReadingReport,
+    r1_cache: Optional[dict],
+    *,
+    web_step_status: str = "skipped",
+    web_step_detail: str = "Local report / R1 context looked sufficient.",
+) -> list[PaperChatStep]:
     return [
         PaperChatStep(
             id="read-report",
@@ -105,6 +152,12 @@ def _base_steps(report: ReadingReport, r1_cache: Optional[dict]) -> list[PaperCh
             label="Check R1 context",
             status="completed",
             detail=f"Checked {len((r1_cache or {}).get('items', []))} cached R1 items.",
+        ),
+        PaperChatStep(
+            id="web-search",
+            label="Web search",
+            status=web_step_status,
+            detail=web_step_detail,
         ),
         PaperChatStep(
             id="compose-answer",
@@ -129,6 +182,7 @@ def _ask_deepseek(
     report: ReadingReport,
     r1_cache: Optional[dict],
     selected: list[Evidence],
+    web_results: list[WebSearchResult],
 ) -> Claim:
     context = {
         "question": question,
@@ -152,14 +206,20 @@ def _ask_deepseek(
         },
         "selected_evidence": [evidence.model_dump(mode="json") for evidence in selected],
         "r1_cache": (r1_cache or {}).get("items", [])[:8],
+        "web_context": [
+            {"title": item.title, "url": item.url, "snippet": item.snippet}
+            for item in web_results[:5]
+        ],
     }
     prompt = (
         "You are Paperflow's evidence-grounded paper chat agent. Answer in Simplified Chinese. "
-        "Use only the JSON context. Return strict JSON with this schema: "
+        "Use only the JSON context. Prefer current-paper evidence over all other context. "
+        "When web_context is used, label it as external web context and cite source URLs. "
+        "Return strict JSON with this schema: "
         '{"answer":{"text":string,"reliability":"R0|R1|R2","evidence":[evidence],"uncertainty":string|null},'
         '"used_context":[string],"process_notes":[string]}. '
         "R0 requires current-paper evidence. R1 requires related-work cache evidence. "
-        "Use R2 for interpretation or when evidence is weak.\n\n"
+        "Use R2 for interpretation, general background, or web-only evidence.\n\n"
         f"Context:\n{json.dumps(context, ensure_ascii=False)}"
     )
     response = httpx.post(
@@ -189,7 +249,16 @@ def _ask_deepseek(
     )
 
 
-def _fallback_answer(report: ReadingReport, request: PaperChatRequest, question: str) -> Claim:
+def _fallback_answer(
+    report: ReadingReport,
+    request: PaperChatRequest,
+    question: str,
+    *,
+    web_results: Optional[list[WebSearchResult]] = None,
+) -> Claim:
+    if web_results and _is_broad_question(question):
+        return _web_fallback_answer(question, web_results)
+
     selected = _find_claim(report, request.selected_claim_id)
     if selected is not None:
         return Claim(
@@ -253,6 +322,88 @@ def _fallback_answer(report: ReadingReport, request: PaperChatRequest, question:
         evidence=[],
         uncertainty="Reading Report is empty.",
     )
+
+
+def _web_fallback_answer(question: str, web_results: list[WebSearchResult]) -> Claim:
+    evidence = [_web_result_to_evidence(item, index) for index, item in enumerate(web_results[:3], start=1)]
+    lead = evidence[0].quote if evidence else ""
+    return Claim(
+        id="chat-answer-web",
+        text=(
+            "本地阅读报告没有足够信息直接回答这个问题；以下基于外部网页搜索结果给出背景性回答。"
+            f"{lead}"
+        ),
+        reliability=ReliabilityLevel.R2,
+        evidence=evidence,
+        uncertainty="This answer uses external web search snippets rather than direct PDF evidence.",
+    )
+
+
+def _web_result_to_evidence(result: WebSearchResult, index: int) -> Evidence:
+    return Evidence(
+        id=f"web-{index}",
+        source=result.url,
+        quote=f"{result.title}: {result.snippet}".strip(": "),
+        location_status=EvidenceLocationStatus.QUOTE_ONLY,
+    )
+
+
+def _should_web_search(
+    *,
+    question: str,
+    request: PaperChatRequest,
+    report: ReadingReport,
+    r1_cache: Optional[dict],
+    selected: list[Evidence],
+    mode: str,
+) -> bool:
+    if mode == "off":
+        return False
+    if mode == "always":
+        return True
+    if _is_broad_question(question):
+        return True
+    if request.selected_claim_id or request.selected_evidence_id or request.quote or selected:
+        return False
+    searchable = " ".join(
+        [
+            report.paper_title,
+            " ".join(claim.text for claim in report.summary),
+            " ".join(section.title for section in report.sections),
+            " ".join(str(item.get("title", "")) for item in (r1_cache or {}).get("items", [])[:8]),
+        ]
+    ).lower()
+    terms = [term for term in question.lower().split() if len(term) >= 4]
+    if terms and not any(term in searchable for term in terms):
+        return True
+    return False
+
+
+def _is_broad_question(question: str) -> bool:
+    lowered = question.lower()
+    triggers = [
+        "什么是",
+        "介绍一下",
+        "背景",
+        "最新",
+        "查一下",
+        "联网",
+        "web",
+        "search",
+        "what is",
+        "explain",
+        "overview",
+        "recent",
+        "latest",
+    ]
+    return any(trigger in lowered for trigger in triggers)
+
+
+def _web_search_query(question: str, report: ReadingReport) -> str:
+    title = (report.paper_title or "").strip()
+    if title:
+        return f"{question} {title}"
+    return question
 
 
 def _selected_evidence(report: ReadingReport, request: PaperChatRequest) -> list[Evidence]:

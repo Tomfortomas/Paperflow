@@ -675,6 +675,11 @@ cd paperflow
                 <td><code>90</code></td>
                 <td>Read timeout in seconds for report generation.</td>
               </tr>
+              <tr>
+                <td><code>PAPERFLOW_DATA_DIR</code></td>
+                <td><code>./data</code></td>
+                <td>Optional override for the single local data root.</td>
+              </tr>
             </tbody>
           </table>
         </section>
@@ -693,7 +698,7 @@ cd paperflow
             </article>
             <article class="card">
               <strong>Storage</strong>
-              <p>SQLite metadata plus local PDFs, JSON reports, parsed chunks, R1 cache, task snapshots, and Markdown notes.</p>
+              <p>Project-level <code>data/</code> directory containing SQLite metadata, local PDFs, JSON reports, parsed chunks, R1 cache, task snapshots, and Markdown notes.</p>
             </article>
           </div>
         </section>

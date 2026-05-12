@@ -211,6 +211,30 @@ export function PdfViewer({
     goToPage(parsed);
   }
 
+  function bumpZoomSlightly(current: string): string {
+    if (current === "fit") return "110";
+    const n = Number(current);
+    if (!Number.isFinite(n)) return "110";
+    if (n < 110) return "110";
+    if (n < 125) return "125";
+    if (n < 150) return "150";
+    if (n < 175) return "175";
+    if (n < 200) return "200";
+    return "200";
+  }
+
+  function bumpZoomSmaller(current: string): string {
+    if (current === "fit") return "fit";
+    const n = Number(current);
+    if (!Number.isFinite(n)) return "fit";
+    if (n >= 200) return "175";
+    if (n >= 175) return "150";
+    if (n >= 150) return "125";
+    if (n >= 125) return "110";
+    if (n >= 110) return "fit";
+    return "fit";
+  }
+
   return (
     <div className="pdf-viewer" ref={containerRef}>
       <div className="pdf-viewer-toolbar" ref={toolbarRef}>
@@ -246,8 +270,28 @@ export function PdfViewer({
         >
           Next ›
         </button>
-        <label className="pdf-viewer-zoom">
+        <div className="pdf-viewer-zoom">
           <span>Zoom</span>
+          <button
+            type="button"
+            className="pdf-viewer-zoom-step"
+            aria-label="Slightly shrink PDF"
+            disabled={zoom === "fit"}
+            title="Step down zoom: 200% → … → Fit"
+            onClick={() => setZoom((z) => bumpZoomSmaller(z))}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            className="pdf-viewer-zoom-step"
+            aria-label="Slightly enlarge PDF"
+            disabled={zoom === "200"}
+            title="Step up zoom: Fit → 110% → … → 200%"
+            onClick={() => setZoom((z) => bumpZoomSlightly(z))}
+          >
+            +
+          </button>
           <select
             aria-label="PDF zoom"
             value={zoom}
@@ -255,10 +299,13 @@ export function PdfViewer({
           >
             <option value="fit">Fit</option>
             <option value="100">100%</option>
+            <option value="110">110%</option>
             <option value="125">125%</option>
             <option value="150">150%</option>
+            <option value="175">175%</option>
+            <option value="200">200%</option>
           </select>
-        </label>
+        </div>
       </div>
       {error ? <p className="warning">{error}</p> : null}
       <div className="pdf-viewer-pages" ref={pagesRef} aria-label="PDF pages">
@@ -320,6 +367,7 @@ function PdfPage({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
   const highlightRef = useRef<HTMLDivElement | null>(null);
+  const lastScrolledHighlightKeyRef = useRef<string | null>(null);
   const [renderedSize, setRenderedSize] = useState<{ width: number; height: number } | null>(null);
   const [renderedScale, setRenderedScale] = useState(1);
   const [error, setError] = useState<string | null>(null);
@@ -407,11 +455,27 @@ function PdfPage({
       maxHeight: pageHeight,
     };
   })();
+  const highlightScrollKey =
+    highlight && highlight.page === pageNumber && renderedSize
+      ? [
+          highlight.page,
+          highlight.bbox.join(","),
+          renderedScale,
+          renderedSize.width,
+          renderedSize.height,
+        ].join(":")
+      : null;
 
   useEffect(() => {
-    if (!highlightStyle || !highlightRef.current) return;
+    if (!highlightScrollKey || !highlightRef.current) {
+      return;
+    }
+    if (lastScrolledHighlightKeyRef.current === highlightScrollKey) {
+      return;
+    }
+    lastScrolledHighlightKeyRef.current = highlightScrollKey;
     onHighlightElement(highlightRef.current);
-  }, [highlightStyle, onHighlightElement]);
+  }, [highlightScrollKey]);
 
   function handleMouseUp() {
     if (!onSelection) return;
@@ -429,8 +493,9 @@ function PdfPage({
       <div className="pdf-viewer-canvas-wrap" onMouseUp={handleMouseUp}>
         <canvas ref={canvasRef} className="pdf-viewer-canvas" />
         <div ref={textLayerRef} className="pdf-viewer-text-layer" />
-        {highlightStyle ? (
+        {highlightStyle && highlightScrollKey ? (
           <div
+            key={highlightScrollKey}
             className="pdf-viewer-highlight"
             ref={highlightRef}
             style={highlightStyle}

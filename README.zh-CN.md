@@ -259,7 +259,9 @@ Agent harness 只在后端。Web 前端和 TUI 都是薄 HTTP client。
 
 ## 数据与 Schema
 
-用户数据存放在 `paperflow/backend/paperflow_data/`，默认 git-ignored。
+用户数据统一存放在项目根目录的 `data/`，默认 git-ignored。
+无论 backend 从仓库根目录、`paperflow/` 还是 `paperflow/backend/` 启动，都会使用这一个位置。
+只有在你明确想覆盖本地数据目录时，才需要设置 `PAPERFLOW_DATA_DIR`。
 
 每个 R0 claim 的基本结构：
 
@@ -298,6 +300,7 @@ PaperFlow/
 │   ├── README.html                       ← GitHub Pages 友好的 README 页面
 │   ├── favicon.svg
 │   └── paperflow_banner.png
+├── data/                                 ← 本地用户数据，git-ignored
 ├── design_docs/                         ← 本地设计 / PRD 笔记
 └── paperflow/
     ├── run-dev.sh                       ← 启动 backend + frontend

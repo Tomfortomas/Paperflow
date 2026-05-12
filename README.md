@@ -259,7 +259,10 @@ The agent harness lives only in the backend. Both the web frontend and the TUI a
 
 ## Data And Schema
 
-User data is stored under `paperflow/backend/paperflow_data/` and is git-ignored by default.
+User data is stored under the project-level `data/` directory and is git-ignored by default.
+This single location is used no matter whether the backend is started from the repository root,
+`paperflow/`, or `paperflow/backend/`. Set `PAPERFLOW_DATA_DIR` only if you intentionally want
+to override the local data root.
 
 Every R0 claim follows this shape:
 
@@ -298,6 +301,7 @@ PaperFlow/
 │   ├── README.html                       ← GitHub Pages-friendly README
 │   ├── favicon.svg
 │   └── paperflow_banner.png
+├── data/                                 ← local user data, git-ignored
 ├── design_docs/                         ← local design / PRD notes
 └── paperflow/
     ├── run-dev.sh                       ← starts backend + frontend

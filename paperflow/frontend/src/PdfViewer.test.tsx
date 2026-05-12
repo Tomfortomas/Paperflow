@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PdfViewer } from "./PdfViewer";
@@ -66,9 +67,55 @@ describe("PdfViewer", () => {
 
     expect(onPageChange).toHaveBeenCalledWith(3);
 
-    await user.selectOptions(screen.getByLabelText(/^PDF zoom$/i), "150");
+    await user.selectOptions(screen.getByLabelText(/^PDF zoom$/i), "200");
 
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("200");
+  });
+
+  it("steps zoom up and down with − / + buttons", async () => {
+    const user = userEvent.setup();
+
+    render(<PdfViewer pdfUrl="http://127.0.0.1:8000/paper.pdf" page={1} />);
+
+    await screen.findByText("Page 1");
+
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("fit");
+    expect(screen.getByRole("button", { name: /Slightly shrink PDF/i })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /Slightly enlarge PDF/i }));
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("110");
+
+    await user.click(screen.getByRole("button", { name: /Slightly enlarge PDF/i }));
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("125");
+
+    await user.click(screen.getByRole("button", { name: /Slightly enlarge PDF/i }));
     expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("150");
+
+    await user.click(screen.getByRole("button", { name: /Slightly enlarge PDF/i }));
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("175");
+
+    await user.click(screen.getByRole("button", { name: /Slightly enlarge PDF/i }));
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("200");
+
+    expect(screen.getByRole("button", { name: /Slightly enlarge PDF/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Slightly shrink PDF/i })).not.toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /Slightly shrink PDF/i }));
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("175");
+
+    await user.click(screen.getByRole("button", { name: /Slightly shrink PDF/i }));
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("150");
+
+    await user.click(screen.getByRole("button", { name: /Slightly shrink PDF/i }));
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("125");
+
+    await user.click(screen.getByRole("button", { name: /Slightly shrink PDF/i }));
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("110");
+
+    await user.click(screen.getByRole("button", { name: /Slightly shrink PDF/i }));
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("fit");
+
+    expect(screen.getByRole("button", { name: /Slightly shrink PDF/i })).toBeDisabled();
   });
 
   it("jumps pages by scrolling the explicit viewer container", async () => {
@@ -139,6 +186,112 @@ describe("PdfViewer", () => {
       ),
     );
     expect(viewer.scrollTop).toBeGreaterThan(0);
+  });
+
+  it("does not pin scrolling back to the same evidence highlight after page changes", async () => {
+    function ControlledViewer() {
+      const [page, setPage] = useState(1);
+      return (
+        <PdfViewer
+          pdfUrl="http://127.0.0.1:8000/paper.pdf"
+          page={page}
+          onPageChange={setPage}
+          highlight={{ page: 2, bbox: [10, 20, 160, 80] }}
+        />
+      );
+    }
+
+    render(
+      <ControlledViewer />,
+    );
+
+    const pages = screen.getByLabelText(/PDF pages/i) as HTMLDivElement;
+    const viewer = pages.parentElement as HTMLDivElement;
+    const scrollTo = mockScrollableViewer(viewer);
+    const page1 = await findPageArticle(1);
+    const page2 = await findPageArticle(2);
+    const page3 = await findPageArticle(3);
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function rect(
+      this: HTMLElement,
+    ) {
+      const element = this as HTMLElement;
+      if (element.classList.contains("pdf-viewer-highlight")) {
+        return domRect({ top: 1200, bottom: 1260, left: 220, right: 340, width: 120, height: 60 });
+      }
+      if (element === page1) {
+        return domRect({ top: -1800, bottom: -1000, left: 0, right: 600, width: 600, height: 800 });
+      }
+      if (element === page2) {
+        return domRect({ top: -900, bottom: -100, left: 0, right: 600, width: 600, height: 800 });
+      }
+      if (element === page3) {
+        return domRect({ top: 60, bottom: 860, left: 0, right: 600, width: 600, height: 800 });
+      }
+      if (element.classList.contains("pdf-viewer")) {
+        return domRect({ top: 0, bottom: 800, left: 0, right: 600, width: 600, height: 800 });
+      }
+      return originalRect.call(this);
+    });
+
+    await waitFor(() =>
+      expect(scrollTo).toHaveBeenCalledWith(
+        expect.objectContaining({ behavior: "smooth", top: expect.any(Number) }),
+      ),
+    );
+    const callsAfterEvidenceJump = scrollTo.mock.calls.length;
+
+    fireEvent.scroll(viewer);
+
+    await waitFor(() => expect(screen.getByLabelText(/^PDF page$/i)).toHaveValue("3"));
+
+    expect(scrollTo).toHaveBeenCalledTimes(callsAfterEvidenceJump);
+  });
+
+  it("scrolls when the requested page changes externally", async () => {
+    const { rerender } = render(
+      <PdfViewer
+        pdfUrl="http://127.0.0.1:8000/paper.pdf"
+        page={1}
+        highlight={{ page: 2, bbox: [10, 20, 160, 80] }}
+      />,
+    );
+
+    const pages = screen.getByLabelText(/PDF pages/i) as HTMLDivElement;
+    const viewer = pages.parentElement as HTMLDivElement;
+    const scrollTo = mockScrollableViewer(viewer);
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function rect(
+      this: HTMLElement,
+    ) {
+      const element = this as HTMLElement;
+      if (element.classList.contains("pdf-viewer-highlight")) {
+        return domRect({ top: 1200, bottom: 1260, left: 220, right: 340, width: 120, height: 60 });
+      }
+      if (element.classList.contains("pdf-viewer")) {
+        return domRect({ top: 0, bottom: 800, left: 0, right: 600, width: 600, height: 800 });
+      }
+      return originalRect.call(this);
+    });
+
+    await waitFor(() =>
+      expect(scrollTo).toHaveBeenCalledWith(
+        expect.objectContaining({ behavior: "smooth", top: expect.any(Number) }),
+      ),
+    );
+    const callsAfterEvidenceJump = scrollTo.mock.calls.length;
+
+    rerender(
+      <PdfViewer
+        pdfUrl="http://127.0.0.1:8000/paper.pdf"
+        page={3}
+        highlight={{ page: 2, bbox: [10, 20, 160, 80] }}
+      />,
+    );
+
+    await Promise.resolve();
+
+    expect(scrollTo.mock.calls.length).toBeGreaterThan(callsAfterEvidenceJump);
   });
 
   it("updates the current page from continuous viewer scrolling", async () => {

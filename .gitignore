@@ -41,7 +41,9 @@ paperflow/backend/paperflow_backend.egg-info/
 
 # Local user data (PDFs, generated reports, Obsidian vault)
 # These are user-owned and may contain copyrighted PDFs — never commit.
+data/
 paperflow/backend/paperflow_data/
+paperflow/paperflow_data/
 paperflow_data/
 
 # ============================================================================

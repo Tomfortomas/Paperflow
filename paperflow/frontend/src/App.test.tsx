@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -319,10 +319,12 @@ describe("Paperflow app", () => {
       id: "chat-1",
       paper_id: "paper-1",
       status: "completed",
+      used_context: ["report", "web_search"],
       steps: [
         { id: "read-report", label: "Read report", status: "completed", detail: "Loaded report" },
         { id: "locate-evidence", label: "Locate evidence", status: "completed", detail: "Used evidence" },
         { id: "check-r1", label: "Check R1 context", status: "completed", detail: "Checked related work" },
+        { id: "web-search", label: "Web search", status: "completed", detail: "Found 1 web result." },
         { id: "compose-answer", label: "Compose answer", status: "completed", detail: "Generated answer" },
       ],
       messages: [
@@ -332,14 +334,14 @@ describe("Paperflow app", () => {
           role: "assistant",
           content: "It extracts structured reading reports.",
           reliability: "R0",
-          evidence: [{ id: "e2", source: "Paperflow.pdf", page: 2, quote: "structured reports" }],
+          evidence: [{ id: "web-1", source: "https://example.com/search", quote: "external context" }],
         },
       ],
       answer: {
         id: "chat-answer",
         text: "It extracts structured reading reports.",
         reliability: "R0",
-        evidence: [{ id: "e2", source: "Paperflow.pdf", page: 2, quote: "structured reports" }],
+        evidence: [{ id: "web-1", source: "https://example.com/search", quote: "external context" }],
       },
     };
     const client = fakeClient({
@@ -366,6 +368,9 @@ describe("Paperflow app", () => {
       expect.any(Function),
     );
     expect(await screen.findByText("Read report")).toBeInTheDocument();
+    expect(screen.getByText("Web search")).toBeInTheDocument();
+    expect(screen.getByText(/使用了外部网页搜索/)).toBeInTheDocument();
+    expect(screen.getByText("https://example.com/search")).toBeInTheDocument();
     expect(screen.getByText("只看 benchmark")).toBeInTheDocument();
     expect(screen.getAllByText("It extracts structured reading reports.").length).toBeGreaterThan(0);
   });
@@ -395,13 +400,14 @@ describe("Paperflow app", () => {
     expect(screen.getByText("持久化回答")).toBeInTheDocument();
   });
 
-  it("offers a PDF viewer toggle once the report is ready", async () => {
+  it("opens the PDF viewer by default when the report is ready", async () => {
     const user = userEvent.setup();
     render(<App initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
 
     await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
 
-    expect(screen.getByRole("button", { name: /打开 PDF 阅读器/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/PDF workspace/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /关闭 PDF 阅读器/i })).toHaveLength(2);
   });
 
   it("surfaces quick actions for jumping to Agent chat", async () => {
@@ -440,13 +446,37 @@ describe("Paperflow app", () => {
     expect(screen.getByLabelText(/^PDF zoom$/i)).toBeInTheDocument();
   });
 
-  it("offers a bounded resize handle for the Agent rail", async () => {
+  it("offers bounded resize handles for the workspace columns", async () => {
     const user = userEvent.setup();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1800 });
     render(<App initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
 
     await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
 
-    expect(screen.getByLabelText(/Resize Agent rail/i)).toBeInTheDocument();
+    const workspace = screen.getByLabelText(/PDF workspace/i).closest("main") as HTMLElement;
+    const pdfHandle = screen.getByLabelText(/Resize PDF and report columns/i);
+    const railHandle = screen.getAllByLabelText(/Resize Agent rail/i)[0];
+
+    expect(pdfHandle).toBeInTheDocument();
+    expect(railHandle).toBeInTheDocument();
+
+    fireEvent.pointerDown(pdfHandle, { clientX: 500 });
+    fireEvent.pointerMove(window, { clientX: 560 });
+    fireEvent.pointerUp(window);
+
+    await waitFor(() => {
+      expect(workspace.style.getPropertyValue("--col-pdf")).toBe("980px");
+      expect(workspace.style.getPropertyValue("--col-report")).toBe("360px");
+    });
+
+    fireEvent.pointerDown(railHandle, { clientX: 560 });
+    fireEvent.pointerMove(window, { clientX: 520 });
+    fireEvent.pointerUp(window);
+
+    await waitFor(() => {
+      expect(workspace.style.getPropertyValue("--col-report")).toBe("320px");
+      expect(workspace.style.getPropertyValue("--col-rail")).toBe("420px");
+    });
   });
 
   it("renders a Field Map lineage graph", async () => {

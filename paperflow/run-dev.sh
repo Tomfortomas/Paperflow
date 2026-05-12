@@ -23,6 +23,7 @@ Environment:
   BACKEND_PORT     default: 8000
   FRONTEND_HOST    default: 127.0.0.1
   FRONTEND_PORT    default: 5173
+  PAPERFLOW_DATA_DIR optional override; default is ../data
 
 Examples:
   ./run-dev.sh
@@ -118,6 +119,7 @@ log "Starting backend: http://${BACKEND_HOST}:${BACKEND_PORT}"
   cd "$BACKEND_DIR"
   # shellcheck disable=SC1091
   source .venv/bin/activate
+  export PAPERFLOW_DATA_DIR="${PAPERFLOW_DATA_DIR:-$ROOT_DIR/../data}"
   exec uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT" --reload
 ) &
 backend_pid=$!

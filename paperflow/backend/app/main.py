@@ -58,7 +58,34 @@ from app.report_service import ReportService
 from app.research_insight import generate_insights
 from app.storage import PaperStorage
 from app.task_queue import TaskQueue
+from app.web_search import DuckDuckGoSearchClient
 from app.zotero import ZoteroError, ZoteroReader
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_STORAGE_ROOT = PROJECT_ROOT / "data"
+
+
+def _resolve_storage_root(storage_root: Optional[Path]) -> Path:
+    if storage_root is not None:
+        return Path(storage_root).expanduser()
+    configured = os.getenv("PAPERFLOW_DATA_DIR")
+    if configured:
+        return Path(configured).expanduser()
+    return DEFAULT_STORAGE_ROOT
+
+
+def _web_search_mode() -> str:
+    mode = os.getenv("PAPERFLOW_WEB_SEARCH", "auto").strip().lower()
+    return mode if mode in {"auto", "off", "always"} else "auto"
+
+
+def _web_search_limit() -> int:
+    raw = os.getenv("PAPERFLOW_WEB_SEARCH_LIMIT", "5")
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 5
+    return max(1, min(8, value))
 
 
 class AskRequest(BaseModel):
@@ -275,9 +302,10 @@ def _chat_evidence(claim: Claim, request: PaperChatRequest) -> List[Evidence]:
 
 
 def create_app(
-    storage_root: Path = Path("paperflow_data"),
+    storage_root: Optional[Path] = None,
     report_service: Optional[ReportService] = None,
     r1_pipeline: Optional[R1SearchPipeline] = None,
+    web_search_client: Optional[object] = None,
 ) -> FastAPI:
     app = FastAPI(title="Paperflow API")
     app.add_middleware(
@@ -288,10 +316,17 @@ def create_app(
         allow_headers=["*"],
     )
 
+    storage_root = _resolve_storage_root(storage_root)
     storage = PaperStorage(storage_root)
     injected_report_service = report_service is not None
     report_service = report_service or ReportService()
     pipeline_factory = (lambda: r1_pipeline) if r1_pipeline is not None else R1SearchPipeline
+    web_search_mode = _web_search_mode()
+    chat_web_search_client = (
+        web_search_client
+        if web_search_client is not None
+        else (None if web_search_mode == "off" else DuckDuckGoSearchClient())
+    )
     reports: Dict[str, ReadingReport] = {}
     task_queue = TaskQueue(storage_root / "tasks")
     _mark_interrupted_report_runs(storage)
@@ -716,6 +751,9 @@ def create_app(
             report=report,
             r1_cache=storage.load_r1(paper_id),
             client=_agent_deepseek_client(report_service),
+            web_search_client=chat_web_search_client,
+            web_search_limit=_web_search_limit(),
+            web_search_mode=web_search_mode,
         )
         turn_id = f"turn-{uuid.uuid4().hex[:10]}"
         persisted = storage.save_chat_turn(response, turn_id=turn_id)
@@ -1094,9 +1132,6 @@ def create_app(
 
 
 app = create_app()
-
-
-# ----------------------------------------------------------------- helpers
 
 
 def _extract_arxiv_id_strict(value: str) -> str:

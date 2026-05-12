@@ -32,10 +32,19 @@ import "./styles.css";
 const defaultClient = createPaperflowClient();
 type Locale = "zh" | "en";
 
-const RAIL_WIDTH_STORAGE_KEY = "paperflow.workspaceRailWidth";
-const RAIL_WIDTH_DEFAULT = 320;
+const RAIL_WIDTH_STORAGE_KEY = "paperflow.workspaceRailWidth.v2";
+const PDF_WIDTH_STORAGE_KEY = "paperflow.workspacePdfWidth.v2";
+const REPORT_WIDTH_STORAGE_KEY = "paperflow.workspaceReportWidth.v2";
+const PDF_WIDTH_DEFAULT = 920;
+const PDF_WIDTH_MIN = 640;
+const PDF_WIDTH_MAX = 1440;
+const REPORT_WIDTH_DEFAULT = 420;
+const REPORT_WIDTH_MIN = 320;
+const REPORT_WIDTH_MAX = 760;
+const RAIL_WIDTH_DEFAULT = 380;
 const RAIL_WIDTH_MIN = 300;
-const RAIL_WIDTH_MAX = 560;
+const RAIL_WIDTH_MAX = 720;
+const PDF_PAGE_FALLBACK_HIGHLIGHT_BBOX: PdfBboxHighlight["bbox"] = [36, 36, 560, 176];
 
 const UI_TEXT = {
   zh: {
@@ -48,7 +57,7 @@ const UI_TEXT = {
     eyebrow: "本地优先的论文研读台",
     libraryTitle: "Paperflow",
     heroDescription:
-      "导入论文，生成带证据的阅读报告，并保存为 Obsidian 原生笔记。",
+      "导入论文，生成带证据的阅读报告。",
     agentLabel: "Agent",
     agentConfig: "Agent 配置",
     agentConfigSaved: "Agent 配置已保存。",
@@ -123,6 +132,7 @@ const UI_TEXT = {
     chatRunning: "Agent 正在处理",
     chatCompleted: "回答已生成",
     chatFailed: "回答失败",
+    webSearchNotice: "使用了外部网页搜索；这些来源不是 PDF 原文证据。",
     askPlaceholder: "例如:只看 benchmark 和 dataset",
     ask: "发送",
     processCards: "过程",
@@ -301,6 +311,7 @@ const UI_TEXT = {
     chatRunning: "Agent is working",
     chatCompleted: "Answer generated",
     chatFailed: "Answer failed",
+    webSearchNotice: "External web search was used; these sources are not PDF evidence.",
     askPlaceholder: "e.g. focus on benchmark and dataset",
     ask: "Send",
     processCards: "Process",
@@ -1077,9 +1088,13 @@ function Workspace({
   const [activeEvidence, setActiveEvidence] = useState<Evidence | null>(
     report?.summary[0]?.evidence?.[0] ?? null,
   );
-  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(true);
   const [pdfPage, setPdfPage] = useState(1);
+  const [pdfColumnWidth, setPdfColumnWidth] = useState(loadStoredPdfWidth);
+  const [reportColumnWidth, setReportColumnWidth] = useState(loadStoredReportWidth);
   const [railWidth, setRailWidth] = useState(loadStoredRailWidth);
+  const pdfColumnWidthRef = useRef(pdfColumnWidth);
+  const reportColumnWidthRef = useRef(reportColumnWidth);
   const railWidthRef = useRef(railWidth);
   const [r1Running, setR1Running] = useState(false);
   const [r1Error, setR1Error] = useState<string | null>(null);
@@ -1093,7 +1108,19 @@ function Workspace({
 
   const isReportReady = paper.status?.stage === "completed";
   const pdfUrl = useMemo(() => client.pdfUrl(paper.id), [client, paper.id]);
-  const railStyle = { "--col-rail": `${railWidth}px` } as CSSProperties;
+  const railStyle = {
+    "--col-pdf": `${pdfColumnWidth}px`,
+    "--col-report": `${reportColumnWidth}px`,
+    "--col-rail": `${railWidth}px`,
+  } as CSSProperties;
+
+  useEffect(() => {
+    pdfColumnWidthRef.current = pdfColumnWidth;
+  }, [pdfColumnWidth]);
+
+  useEffect(() => {
+    reportColumnWidthRef.current = reportColumnWidth;
+  }, [reportColumnWidth]);
 
   useEffect(() => {
     railWidthRef.current = railWidth;
@@ -1136,8 +1163,11 @@ function Workspace({
 
   const highlight: PdfBboxHighlight | null = (() => {
     const first = activeEvidence ?? selectedClaim?.evidence?.[0];
-    if (!first?.page || !first.bbox) return null;
-    return { page: first.page, bbox: first.bbox };
+    if (!first?.page) return null;
+    return {
+      page: first.page,
+      bbox: first.bbox ?? PDF_PAGE_FALLBACK_HIGHLIGHT_BBOX,
+    };
   })();
 
   function openEvidenceInPdf(evidence: Evidence) {
@@ -1148,19 +1178,71 @@ function Workspace({
     setPdfViewerOpen(true);
   }
 
+  function startPdfReportResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startPdfWidth = pdfColumnWidthRef.current;
+    const startReportWidth = reportColumnWidthRef.current;
+    document.body.classList.add("is-resizing-workspace");
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      const delta = clampResizeDelta(
+        moveEvent.clientX - startX,
+        startPdfWidth,
+        startReportWidth,
+        PDF_WIDTH_MIN,
+        clampPdfWidth(PDF_WIDTH_MAX),
+        REPORT_WIDTH_MIN,
+        clampReportWidth(REPORT_WIDTH_MAX),
+      );
+      const nextPdfWidth = clampPdfWidth(startPdfWidth + delta);
+      const nextReportWidth = clampReportWidth(startReportWidth - delta);
+      pdfColumnWidthRef.current = nextPdfWidth;
+      reportColumnWidthRef.current = nextReportWidth;
+      setPdfColumnWidth(nextPdfWidth);
+      setReportColumnWidth(nextReportWidth);
+    };
+    const handleUp = () => {
+      document.body.classList.remove("is-resizing-workspace");
+      savePdfWidth(pdfColumnWidthRef.current);
+      saveReportWidth(reportColumnWidthRef.current);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
+  }
+
   function startRailResize(event: ReactPointerEvent<HTMLButtonElement>) {
     event.preventDefault();
     const startX = event.clientX;
+    const startReportWidth = reportColumnWidthRef.current;
     const startWidth = railWidthRef.current;
-    document.body.classList.add("is-resizing-rail");
+    document.body.classList.add("is-resizing-workspace");
 
     const handleMove = (moveEvent: PointerEvent) => {
-      const nextWidth = clampRailWidth(startWidth + startX - moveEvent.clientX);
+      const delta = clampResizeDelta(
+        moveEvent.clientX - startX,
+        startReportWidth,
+        startWidth,
+        REPORT_WIDTH_MIN,
+        clampReportWidth(REPORT_WIDTH_MAX),
+        RAIL_WIDTH_MIN,
+        clampRailWidth(RAIL_WIDTH_MAX),
+      );
+      const nextReportWidth = clampReportWidth(startReportWidth + delta);
+      const nextWidth = clampRailWidth(startWidth - delta);
+      reportColumnWidthRef.current = nextReportWidth;
       railWidthRef.current = nextWidth;
+      setReportColumnWidth(nextReportWidth);
       setRailWidth(nextWidth);
     };
     const handleUp = () => {
-      document.body.classList.remove("is-resizing-rail");
+      document.body.classList.remove("is-resizing-workspace");
+      saveReportWidth(reportColumnWidthRef.current);
       saveRailWidth(railWidthRef.current);
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
@@ -1188,6 +1270,7 @@ function Workspace({
         { id: "read-report", label: "Read report", status: "running" },
         { id: "locate-evidence", label: "Locate evidence", status: "pending" },
         { id: "check-r1", label: "Check R1 context", status: "pending" },
+        { id: "web-search", label: "Web search", status: "pending" },
         { id: "compose-answer", label: "Compose answer", status: "pending" },
         { id: "persist-transcript", label: "Persist transcript", status: "pending" },
       ],
@@ -1428,6 +1511,15 @@ function Workspace({
         onLocaleToggle={onLocaleToggle}
       />
       {pdfWorkspacePane}
+      {pdfViewerOpen && isReportReady ? (
+        <button
+          type="button"
+          className="workspace-resize-handle workspace-resize-handle-pdf"
+          aria-label="Resize PDF and report columns"
+          title={locale === "zh" ? "拖动调整 PDF / 报告宽度" : "Resize PDF / report columns"}
+          onPointerDown={startPdfReportResize}
+        />
+      ) : null}
       <section className="workspace-main">
         {importNotice ? <p className="notice-line">{importNotice}</p> : null}
         <ImportActivityBanner activity={importActivity} locale={locale} />
@@ -1559,6 +1651,16 @@ function Workspace({
           onGenerate={() => void buildFieldMap()}
         />
       </section>
+
+      {pdfViewerOpen && isReportReady ? (
+        <button
+          type="button"
+          className="workspace-resize-handle workspace-resize-handle-rail"
+          aria-label="Resize Agent rail"
+          title={locale === "zh" ? "拖动调整报告 / Agent 宽度" : "Resize report / Agent columns"}
+          onPointerDown={startRailResize}
+        />
+      ) : null}
 
       <Rail
         agentConfig={agentConfig}
@@ -2180,6 +2282,9 @@ function Rail({
                 </div>
               ))}
             </div>
+            {chat.used_context?.includes("web_search") ? (
+              <p className="agent-web-context-note">{text.webSearchNotice}</p>
+            ) : null}
             <div className="agent-transcript">
               {chat.messages.map((message) => (
                 <article className={`agent-message is-${message.role}`} key={message.id}>
@@ -2195,6 +2300,9 @@ function Rail({
                   {message.evidence && message.evidence.length > 0 ? (
                     <p className="agent-message-evidence">
                       {message.evidence[0].quote}
+                      {isExternalSource(message.evidence[0].source) ? (
+                        <span>{message.evidence[0].source}</span>
+                      ) : null}
                     </p>
                   ) : null}
                 </article>
@@ -3065,38 +3173,102 @@ function importActivityMessage(activity: ImportActivity, locale: Locale) {
   }
 }
 
+function loadStoredPdfWidth() {
+  return loadStoredWidth(PDF_WIDTH_STORAGE_KEY, PDF_WIDTH_DEFAULT, clampPdfWidth);
+}
+
+function savePdfWidth(width: number) {
+  saveStoredWidth(PDF_WIDTH_STORAGE_KEY, width, clampPdfWidth);
+}
+
+function loadStoredReportWidth() {
+  return loadStoredWidth(REPORT_WIDTH_STORAGE_KEY, REPORT_WIDTH_DEFAULT, clampReportWidth);
+}
+
+function saveReportWidth(width: number) {
+  saveStoredWidth(REPORT_WIDTH_STORAGE_KEY, width, clampReportWidth);
+}
+
 function loadStoredRailWidth() {
-  if (typeof window === "undefined" || typeof window.localStorage?.getItem !== "function") {
-    return RAIL_WIDTH_DEFAULT;
-  }
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem(RAIL_WIDTH_STORAGE_KEY);
-  } catch {
-    return RAIL_WIDTH_DEFAULT;
-  }
-  const parsed = stored ? Number.parseInt(stored, 10) : RAIL_WIDTH_DEFAULT;
-  return clampRailWidth(Number.isFinite(parsed) ? parsed : RAIL_WIDTH_DEFAULT);
+  return loadStoredWidth(RAIL_WIDTH_STORAGE_KEY, RAIL_WIDTH_DEFAULT, clampRailWidth);
 }
 
 function saveRailWidth(width: number) {
+  saveStoredWidth(RAIL_WIDTH_STORAGE_KEY, width, clampRailWidth);
+}
+
+function loadStoredWidth(
+  key: string,
+  fallback: number,
+  clamp: (width: number) => number,
+) {
+  if (typeof window === "undefined" || typeof window.localStorage?.getItem !== "function") {
+    return fallback;
+  }
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(key);
+  } catch {
+    return fallback;
+  }
+  const parsed = stored ? Number.parseInt(stored, 10) : fallback;
+  return clamp(Number.isFinite(parsed) ? parsed : fallback);
+}
+
+function saveStoredWidth(key: string, width: number, clamp: (width: number) => number) {
   if (typeof window.localStorage?.setItem !== "function") {
     return;
   }
   try {
-    window.localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(clampRailWidth(width)));
+    window.localStorage.setItem(key, String(clamp(width)));
   } catch {
-    // Persisting the rail width is nice-to-have; resizing should still work.
+    // Persisting user layout is nice-to-have; resizing should still work.
   }
+}
+
+function clampPdfWidth(width: number) {
+  if (typeof window === "undefined") {
+    return Math.min(PDF_WIDTH_MAX, Math.max(PDF_WIDTH_MIN, width));
+  }
+  const viewportBound = Math.floor(window.innerWidth * 0.74);
+  const maxWidth = Math.max(PDF_WIDTH_MIN, Math.min(PDF_WIDTH_MAX, viewportBound));
+  return Math.min(maxWidth, Math.max(PDF_WIDTH_MIN, width));
+}
+
+function clampReportWidth(width: number) {
+  if (typeof window === "undefined") {
+    return Math.min(REPORT_WIDTH_MAX, Math.max(REPORT_WIDTH_MIN, width));
+  }
+  const viewportBound = Math.floor(window.innerWidth * 0.5);
+  const maxWidth = Math.max(REPORT_WIDTH_MIN, Math.min(REPORT_WIDTH_MAX, viewportBound));
+  return Math.min(maxWidth, Math.max(REPORT_WIDTH_MIN, width));
 }
 
 function clampRailWidth(width: number) {
   if (typeof window === "undefined") {
     return Math.min(RAIL_WIDTH_MAX, Math.max(RAIL_WIDTH_MIN, width));
   }
-  const viewportBound = Math.floor(window.innerWidth * 0.42);
+  const viewportBound = Math.floor(window.innerWidth * 0.48);
   const maxWidth = Math.max(RAIL_WIDTH_MIN, Math.min(RAIL_WIDTH_MAX, viewportBound));
   return Math.min(maxWidth, Math.max(RAIL_WIDTH_MIN, width));
+}
+
+function isExternalSource(source?: string | null) {
+  return Boolean(source && /^https?:\/\//i.test(source));
+}
+
+function clampResizeDelta(
+  delta: number,
+  leftStart: number,
+  rightStart: number,
+  leftMin: number,
+  leftMax: number,
+  rightMin: number,
+  rightMax: number,
+) {
+  const lower = Math.max(leftMin - leftStart, rightStart - rightMax);
+  const upper = Math.min(leftMax - leftStart, rightStart - rightMin);
+  return Math.min(upper, Math.max(lower, delta));
 }
 
 function sleep(ms: number) {

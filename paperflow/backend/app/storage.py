@@ -55,6 +55,7 @@ class PaperStorage:
         self.report_dir.mkdir(parents=True, exist_ok=True)
         self.chunk_dir.mkdir(parents=True, exist_ok=True)
         self._init_db()
+        self._migrate_legacy_artifact_paths()
 
     def chunks_path(self, paper_id: str) -> Path:
         return self.chunk_dir / f"{paper_id}.json"
@@ -677,6 +678,46 @@ class PaperStorage:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _migrate_legacy_artifact_paths(self) -> None:
+        """Rewrite old paperflow_data artifact paths to this storage root.
+
+        Earlier dev launches used cwd-relative ``paperflow_data`` roots, so the
+        same local library could end up storing paths that no longer point to
+        the moved PDF/note files after consolidating data into one directory.
+        """
+
+        with self._connect() as conn:
+            rows = conn.execute("select id, pdf_path, note_path from papers").fetchall()
+            for row in rows:
+                pdf_path = self._resolve_legacy_artifact_path(row["pdf_path"])
+                note_path = self._resolve_legacy_artifact_path(row["note_path"])
+                if pdf_path is None and note_path is None:
+                    continue
+                conn.execute(
+                    "update papers set pdf_path = coalesce(?, pdf_path), note_path = coalesce(?, note_path) where id = ?",
+                    (
+                        str(pdf_path) if pdf_path is not None else None,
+                        str(note_path) if note_path is not None else None,
+                        row["id"],
+                    ),
+                )
+
+    def _resolve_legacy_artifact_path(self, value: Optional[str]) -> Optional[Path]:
+        if not value:
+            return None
+        path = Path(value)
+        if path.is_file():
+            return None
+        parts = path.parts
+        if "paperflow_data" not in parts:
+            return None
+        legacy_index = parts.index("paperflow_data")
+        relative_parts = parts[legacy_index + 1 :]
+        if not relative_parts:
+            return None
+        candidate = self.root.joinpath(*relative_parts)
+        return candidate if candidate.is_file() else None
 
     def _init_db(self) -> None:
         with self._connect() as conn:

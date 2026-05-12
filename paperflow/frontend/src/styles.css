@@ -1366,12 +1366,79 @@ input[type="file"]::file-selector-button:hover {
   }
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1440px) {
+  .workspace:not(.workspace-has-pdf) {
+    max-width: min(124ch, calc(100vw - var(--space-6) * 2));
+  }
+}
+
+@media (min-width: 1440px) {
   .workspace.workspace-has-pdf {
-    grid-template-columns: clamp(460px, 42vw, 860px) minmax(0, var(--col-read)) var(--col-rail);
-    gap: var(--space-6);
-    max-width: min(1960px, calc(100vw - var(--space-6) * 2));
+    /* Fixed-width tracks with JS-controlled, bounded resize handles. */
+    --col-read: var(--col-report);
+    --workspace-resizer-width: 12px;
+    --workspace-gap-total: calc(var(--space-2) * 4);
+    --workspace-track-width: calc(
+      var(--col-pdf) + var(--col-report) + var(--col-rail) +
+        var(--workspace-resizer-width) + var(--workspace-resizer-width) +
+        var(--workspace-gap-total)
+    );
+    grid-template-columns:
+      minmax(640px, var(--col-pdf))
+      var(--workspace-resizer-width)
+      minmax(320px, var(--col-report))
+      var(--workspace-resizer-width)
+      minmax(300px, var(--col-rail));
+    column-gap: var(--space-2);
+    row-gap: var(--space-6);
+    width: fit-content;
+    max-width: min(var(--workspace-track-width), calc(100vw - var(--space-4) * 2));
+    padding: var(--space-5) var(--space-4) var(--space-9);
     align-items: start;
+  }
+}
+
+/* Large desktop: keep the same fixed tracks but give the page more room. */
+@media (min-width: 1536px) {
+  .workspace.workspace-has-pdf {
+    --workspace-gap-total: calc(var(--space-3) * 4);
+    column-gap: var(--space-3);
+    row-gap: var(--space-7);
+    max-width: min(var(--workspace-track-width), calc(100vw - var(--space-4) * 2));
+    padding: var(--space-6) var(--space-5) var(--space-9);
+  }
+}
+
+@media (min-width: 1680px) {
+  .workspace.workspace-has-pdf {
+    --workspace-visible-width: min(
+      var(--workspace-track-width),
+      calc(100vw - var(--space-4) * 2)
+    );
+    margin-left: max(
+      var(--space-4),
+      calc((100vw - var(--workspace-visible-width)) / 2 - clamp(72px, 8vw, 180px))
+    );
+    margin-right: auto;
+  }
+}
+
+/* Ultra-wide / 4K-style: preserve user-set fixed widths with more breathing room. */
+@media (min-width: 1920px) {
+  .workspace.workspace-has-pdf {
+    --workspace-gap-total: calc(var(--space-5) * 4);
+    column-gap: var(--space-5);
+    row-gap: var(--space-8);
+    --workspace-visible-width: min(
+      var(--workspace-track-width),
+      calc(100vw - var(--space-7) * 2)
+    );
+    max-width: var(--workspace-visible-width);
+    margin-left: max(
+      var(--space-5),
+      calc((100vw - var(--workspace-visible-width)) / 2 - clamp(120px, 10vw, 260px))
+    );
+    padding: var(--space-7) var(--space-8) var(--space-9);
   }
 }
 
@@ -1379,9 +1446,14 @@ input[type="file"]::file-selector-button:hover {
   min-width: 0;
 }
 
+.workspace-resize-handle {
+  display: none;
+}
+
 .workspace-pdf-pane {
   min-width: 0;
   grid-column: 1 / -1;
+  position: relative;
   padding: var(--space-4);
   border: 1px solid color-mix(in oklch, var(--line) 72%, transparent);
   border-radius: var(--radius);
@@ -1406,7 +1478,7 @@ input[type="file"]::file-selector-button:hover {
   word-break: break-all;
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1440px) {
   .workspace-has-pdf .workspace-pdf-pane {
     display: flex;
     flex-direction: column;
@@ -1417,11 +1489,66 @@ input[type="file"]::file-selector-button:hover {
     overflow: hidden;
     overscroll-behavior: contain;
   }
-  .workspace-has-pdf .workspace-main {
+  .workspace-has-pdf .workspace-resize-handle-pdf {
+    display: block;
     grid-column: 2;
+    grid-row: 2 / span 1;
+    justify-self: stretch;
+    align-self: stretch;
+    width: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--paper-2) 70%, transparent);
+    cursor: col-resize;
+    position: relative;
+    z-index: 8;
+  }
+  .workspace-has-pdf .workspace-resize-handle-rail {
+    display: block;
+    grid-column: 4;
+    grid-row: 2 / span 1;
+    justify-self: stretch;
+    align-self: stretch;
+    width: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--paper-2) 70%, transparent);
+    cursor: col-resize;
+    position: relative;
+    z-index: 8;
+  }
+  .workspace-has-pdf .workspace-resize-handle::after {
+    content: "";
+    position: absolute;
+    top: var(--space-3);
+    bottom: var(--space-3);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--rule-strong) 42%, transparent);
+    opacity: 0.55;
+    transition: opacity var(--dur-1) var(--ease-out-quart),
+      background var(--dur-1) var(--ease-out-quart),
+      width var(--dur-1) var(--ease-out-quart);
+  }
+  .workspace-has-pdf .workspace-resize-handle:hover::after,
+  .workspace-has-pdf .workspace-resize-handle:focus-visible::after,
+  body.is-resizing-workspace .workspace-resize-handle::after {
+    opacity: 1;
+    width: 3px;
+    background: color-mix(in oklch, var(--accent) 58%, var(--rule-strong));
+  }
+  .workspace-has-pdf .workspace-main {
+    grid-column: 3;
   }
   .workspace-has-pdf .workspace-rail {
-    grid-column: 3;
+    grid-column: 5;
+  }
+  .workspace-has-pdf .workspace-rail .rail-resize-handle {
+    display: none;
   }
 }
 
@@ -2285,11 +2412,11 @@ input[type="file"]::file-selector-button:hover {
   }
   .rail-resize-handle:hover::after,
   .rail-resize-handle:focus-visible::after,
-  body.is-resizing-rail .rail-resize-handle::after {
+  body.is-resizing-workspace .rail-resize-handle::after {
     opacity: 1;
     background: color-mix(in oklch, var(--accent) 58%, var(--rule-strong));
   }
-  body.is-resizing-rail {
+  body.is-resizing-workspace {
     cursor: col-resize;
     user-select: none;
   }
@@ -2475,6 +2602,15 @@ input[type="file"]::file-selector-button:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+.agent-web-context-note {
+  padding: var(--space-2);
+  border: 1px solid color-mix(in oklch, var(--r1-ink) 34%, var(--rule));
+  background: color-mix(in oklch, var(--r1-bg) 42%, var(--paper-1));
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: var(--t-micro);
+  line-height: 1.45;
+}
 
 .agent-message {
   padding: var(--space-3);
@@ -2506,6 +2642,15 @@ input[type="file"]::file-selector-button:hover {
   font-style: italic;
   line-height: 1.45;
   color: var(--ink-3);
+}
+.agent-message-evidence span {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-style: normal;
+  color: var(--ink-4);
+  word-break: break-all;
 }
 .agent-composer {
   position: sticky;
@@ -2561,7 +2706,7 @@ input[type="file"]::file-selector-button:hover {
   min-height: 0;
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1440px) {
   .workspace-pdf-pane .pdf-viewer-shell {
     flex: 1 1 auto;
     min-height: 0;
@@ -2585,7 +2730,7 @@ input[type="file"]::file-selector-button:hover {
   min-height: 0;
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1440px) {
   .workspace-pdf-pane .pdf-viewer {
     height: 100%;
     overflow: auto;
@@ -2596,7 +2741,7 @@ input[type="file"]::file-selector-button:hover {
 .pdf-viewer-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   padding: 0 var(--space-2) var(--space-3);
   flex-wrap: wrap;
   position: sticky;
@@ -2606,15 +2751,22 @@ input[type="file"]::file-selector-button:hover {
   backdrop-filter: blur(10px);
 }
 
+@media (min-width: 1536px) {
+  .workspace-pdf-pane .pdf-viewer-toolbar {
+    flex-wrap: nowrap;
+    gap: var(--space-2);
+  }
+}
+
 .pdf-viewer-toolbar button,
 .pdf-viewer-toolbar input,
 .pdf-viewer-toolbar select {
   font-family: var(--font-sans);
-  font-size: var(--t-ui);
+  font-size: var(--t-micro);
   color: var(--ink-2);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
-  padding: 0.45em 0.75em;
+  padding: 0.4em 0.6em;
   transition: color var(--dur-1) var(--ease-out-quart),
     border-color var(--dur-1) var(--ease-out-quart);
 }
@@ -2656,11 +2808,20 @@ input[type="file"]::file-selector-button:hover {
   letter-spacing: 0.08em;
 }
 .pdf-viewer-page-form input {
-  width: 4.8rem;
+  width: 4rem;
   font-variant-numeric: tabular-nums;
 }
 .pdf-viewer-zoom select {
-  min-width: 5.8rem;
+  min-width: 5rem;
+}
+
+/* Compact zoom step buttons (− / +) next to zoom preset */
+.pdf-viewer-zoom-step {
+  padding: 0.4em 0.48em;
+  min-width: 2em;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .pdf-viewer-pages {
@@ -2673,7 +2834,7 @@ input[type="file"]::file-selector-button:hover {
   min-height: 0;
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1440px) {
   .workspace-pdf-pane .pdf-viewer-pages {
     padding-right: var(--space-2);
   }
@@ -2724,12 +2885,46 @@ input[type="file"]::file-selector-button:hover {
   background: var(--accent-soft);
 }
 
+/* Evidence bbox: red translucent marker; intentionally strong for fast visual search. */
 .pdf-viewer-highlight {
   position: absolute;
-  background: color-mix(in oklch, var(--accent) 18%, transparent);
-  border: 1.5px solid var(--accent);
-  border-radius: var(--radius);
   pointer-events: none;
+  z-index: 2;
+  border-radius: 5px;
+  background: rgb(239 68 68 / 0.26);
+  border: 1px solid rgb(220 38 38 / 0.6);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.6),
+    0 0 0 3px rgb(239 68 68 / 0.18);
+  animation: pdf-highlight-flash 1.2s ease-out 1;
+}
+
+@keyframes pdf-highlight-flash {
+  0% {
+    background: rgb(239 68 68 / 0.46);
+    border-color: rgb(185 28 28 / 0.82);
+    filter: brightness(1.08) saturate(1.18);
+    box-shadow:
+      0 0 0 2px rgb(255 255 255 / 0.72),
+      0 0 0 5px rgb(239 68 68 / 0.24),
+      0 0 18px 4px rgb(239 68 68 / 0.28);
+  }
+  35% {
+    background: rgb(239 68 68 / 0.34);
+    border-color: rgb(220 38 38 / 0.7);
+    filter: brightness(1.02);
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.64),
+      0 0 0 4px rgb(239 68 68 / 0.2);
+  }
+  100% {
+    background: rgb(239 68 68 / 0.26);
+    border-color: rgb(220 38 38 / 0.6);
+    filter: brightness(1) saturate(1);
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.6),
+      0 0 0 3px rgb(239 68 68 / 0.18);
+  }
 }
 
 /* ============================================================================

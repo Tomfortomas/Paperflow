@@ -46,6 +46,33 @@ def test_metadata_round_trip(tmp_path: Path) -> None:
     assert persisted.content_hash is not None
 
 
+def test_storage_migrates_legacy_paperflow_data_paths(tmp_path: Path) -> None:
+    root = tmp_path / "data"
+    storage = PaperStorage(root)
+    pdf = _write_pdf(root / "pdfs" / "legacy.pdf")
+    note = (root / "notes" / "legacy.md")
+    note.write_text("# Legacy", encoding="utf-8")
+    with storage._connect() as conn:
+        conn.execute(
+            "insert into papers (id, title, pdf_path, note_path) values (?, ?, ?, ?)",
+            (
+                "legacy-paper",
+                "Legacy Paper",
+                "paperflow_data/pdfs/legacy.pdf",
+                "paperflow_data/notes/legacy.md",
+            ),
+        )
+        conn.execute(
+            "insert into sessions (id, paper_id, stage, message, progress) values (?, ?, ?, ?, ?)",
+            ("session-legacy", "legacy-paper", "completed", "Reading report generated", 1.0),
+        )
+
+    migrated = PaperStorage(root).get_paper("legacy-paper")
+
+    assert migrated.pdf_path == pdf
+    assert migrated.note_path == note
+
+
 def test_dedup_by_doi_replaces_existing(tmp_path: Path) -> None:
     storage = PaperStorage(tmp_path / "data")
     pdf_a = _write_pdf(tmp_path / "a.pdf", b"%PDF-1.4\nA")
