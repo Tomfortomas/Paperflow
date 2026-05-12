@@ -1663,7 +1663,7 @@ function AgentParseTrace({ locale, paper }: { locale: Locale; paper: Paper }) {
       id: "model",
       title: labels.model,
       detail:
-        isFailed || (isProcessing && deepSeekProgress)
+        isFailed || (isProcessing && isDeepSeekProgressMessage(status.message))
           ? localizeTaskMessage(status.message, locale)
           : labels.modelDetail,
       state: isFailed ? "failed" : isProcessing ? "running" : "pending",
@@ -2812,6 +2812,30 @@ function localizeTaskMessage(message: string, locale: Locale) {
       ? `PDF 文本已抽取：${formatExtractedTextSize(pdfProgress.input, locale)}。`
       : `PDF text extracted: ${formatExtractedTextSize(pdfProgress.input, locale)}.`;
   }
+  const briefingProgress = parseDeepSeekBriefingMessage(message);
+  if (briefingProgress) {
+    return locale === "zh"
+      ? `DeepSeek 正在快速扫读论文：模型 ${briefingProgress.model}，${formatExtractedTextSize(briefingProgress.input, locale)}。`
+      : `DeepSeek is building a fast paper briefing: model ${briefingProgress.model}, ${formatExtractedTextSize(briefingProgress.input, locale)}.`;
+  }
+  const chunkRunProgress = parseDeepSeekChunkRunMessage(message);
+  if (chunkRunProgress) {
+    return locale === "zh"
+      ? `DeepSeek 正在并行抽取 ${chunkRunProgress.chunks} 个 chunk：模型 ${chunkRunProgress.model}，${formatExtractedTextSize(chunkRunProgress.input, locale)}。`
+      : `DeepSeek is extracting ${chunkRunProgress.chunks} chunks in parallel: model ${chunkRunProgress.model}, ${formatExtractedTextSize(chunkRunProgress.input, locale)}.`;
+  }
+  const chunkDoneProgress = parseDeepSeekChunkDoneMessage(message);
+  if (chunkDoneProgress) {
+    return locale === "zh"
+      ? `DeepSeek chunk 抽取进度：${chunkDoneProgress.done}/${chunkDoneProgress.total}。`
+      : `DeepSeek chunk extraction progress: ${chunkDoneProgress.done}/${chunkDoneProgress.total}.`;
+  }
+  const synthesisProgress = parseDeepSeekSynthesisMessage(message);
+  if (synthesisProgress) {
+    return locale === "zh"
+      ? `DeepSeek 正在由 coordinator 合并去重：${synthesisProgress.chunks} 个 chunk reports。`
+      : `DeepSeek coordinator is merging and deduplicating ${synthesisProgress.chunks} chunk reports.`;
+  }
   const deepSeekProgress = parseDeepSeekProgressMessage(message);
   if (deepSeekProgress) {
     const coverage = formatDeepSeekInputCoverage(deepSeekProgress.input, locale);
@@ -2824,7 +2848,13 @@ function localizeTaskMessage(message: string, locale: Locale) {
 }
 
 function isDeepSeekProgressMessage(message: string) {
-  return parseDeepSeekProgressMessage(message) !== null;
+  return (
+    parseDeepSeekProgressMessage(message) !== null ||
+    parseDeepSeekBriefingMessage(message) !== null ||
+    parseDeepSeekChunkRunMessage(message) !== null ||
+    parseDeepSeekChunkDoneMessage(message) !== null ||
+    parseDeepSeekSynthesisMessage(message) !== null
+  );
 }
 
 function parseDeepSeekProgressMessage(message: string) {
@@ -2860,6 +2890,40 @@ function parsePartialReportProgressMessage(message: string) {
     coverage: match[1],
     chunks: match[2],
   };
+}
+
+function parseDeepSeekBriefingMessage(message: string) {
+  const match = message.match(/^DeepSeek briefing is running \(model=([^,]+), input=([^)]+)\)$/);
+  if (!match) {
+    return null;
+  }
+  return { model: match[1], input: match[2] };
+}
+
+function parseDeepSeekChunkRunMessage(message: string) {
+  const match = message.match(
+    /^DeepSeek parallel chunk extraction is running \(model=([^,]+), chunks=(\d+), input=([^)]+)\)$/,
+  );
+  if (!match) {
+    return null;
+  }
+  return { model: match[1], chunks: match[2], input: match[3] };
+}
+
+function parseDeepSeekChunkDoneMessage(message: string) {
+  const match = message.match(/^DeepSeek chunk completed \(chunk=(\d+)\/(\d+)\)$/);
+  if (!match) {
+    return null;
+  }
+  return { done: match[1], total: match[2] };
+}
+
+function parseDeepSeekSynthesisMessage(message: string) {
+  const match = message.match(/^DeepSeek coordinator synthesis is running \(model=([^,]+), chunks=(\d+)\)$/);
+  if (!match) {
+    return null;
+  }
+  return { model: match[1], chunks: match[2] };
 }
 
 function formatExtractedTextSize(input: string, locale: Locale) {

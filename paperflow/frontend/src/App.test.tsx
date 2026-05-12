@@ -209,6 +209,28 @@ describe("Paperflow app", () => {
     expect(screen.getByText(/1m 4s/)).toBeInTheDocument();
   });
 
+  it("localizes v0.6 parallel chunk progress in the parse trace", async () => {
+    const user = userEvent.setup();
+    const processingPaper: Paper = {
+      ...paper,
+      status: {
+        stage: "processing",
+        message: "DeepSeek chunk completed (chunk=2/8)",
+        progress: 0.51,
+      },
+    };
+
+    const client = fakeClient({
+      getStatus: vi.fn().mockResolvedValue(processingPaper.status),
+    });
+
+    render(<App client={client} initialPapers={[processingPaper]} />);
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+
+    expect(screen.getAllByText(/DeepSeek chunk 抽取进度：2\/8/).length).toBeGreaterThan(0);
+  });
+
   it("deletes a paper after inline confirmation", async () => {
     const user = userEvent.setup();
     const client = fakeClient({

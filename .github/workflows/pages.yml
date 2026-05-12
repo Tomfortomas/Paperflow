@@ -29,6 +29,8 @@ jobs:
         run: |
           mkdir -p _site/assets
           cp index.html _site/index.html
+          cp README.html _site/README.html
+          cp favicon.svg _site/favicon.svg
           cp README.md _site/README.md
           cp README.zh-CN.md _site/README.zh-CN.md
           cp -R assets/. _site/assets/

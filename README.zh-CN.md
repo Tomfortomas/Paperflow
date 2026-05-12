@@ -40,6 +40,7 @@ Paperflow 把读论文变成一个可追溯、可积累的本地研究流程：
 
 ## News
 
+- **2026-05-12 — v0.6 完成。** 报告生成升级为快速 briefing → 并行 chunk 抽取 → coordinator 合并综合，在减少等待时间的同时保留全局一致性和证据追踪。
 - **2026-05-12 — v0.5 完成。** Workspace 支持高清连续滚动 PDF pane、页码跳转、缩放控件、证据居中滚动，以及大屏三栏阅读布局。
 - **2026-05-12 — v0.4 完成。** Agent Chat 已持久化，支持 SSE 对话流，evidence 可打开 PDF 并跳页，Field Map 关系边加入 Agent enrichment 元数据。
 - **2026-05-12 — v0.3 发布。** Workspace 右侧升级为正式 Agent 对话栏，包含 transcript、process cards、status、composer 和 paper-scoped chat API。
@@ -416,3 +417,10 @@ Paperflow 当前有两个前端，共用同一个后端 Agent harness：
 - [x] PDF 支持连续滚动阅读，toolbar 支持直接输入页码跳转，并提供 `Fit`、`100%`、`125%`、`150%` 缩放预设。
 - [x] PDF 从报告流中独立成 Workspace pane，大屏下变成左侧栏。
 - [x] 保留 evidence-driven PDF 打开逻辑：点击 evidence 会打开 PDF pane、跳到对应页，并在有 bbox 时把高亮滚到视野中。
+
+### v0.6
+
+- [x] 将串行全文报告生成替换为分阶段 Agent pipeline：快速 paper briefing、并行 chunk 抽取、coordinator 去重合并、最终综合。
+- [x] 所有 chunk agent 共享同一份 paper briefing，让并行抽取仍保持全局一致，并减少重复 claim。
+- [x] 并行抽取过程中继续保存 partial report，最终由 coordinator 合并重复、保守补齐缺失 section，并保留精确 evidence quote。
+- [x] 增加更细的生成状态：briefing、并行 chunk 抽取、单个 chunk 完成、coordinator synthesis。

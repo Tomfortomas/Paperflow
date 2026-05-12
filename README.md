@@ -40,6 +40,7 @@ The product stance is simple: **report first, chat second, evidence always**.
 
 ## News
 
+- **2026-05-12 — v0.6 completed.** Report generation now uses a fast briefing → parallel chunk extraction → coordinator synthesis pipeline, reducing wait time while preserving global consistency and evidence grounding.
 - **2026-05-12 — v0.5 completed.** The Workspace now supports a high-resolution continuous PDF pane, page jump, zoom controls, evidence-centered scrolling, and a large-screen three-column reading layout.
 - **2026-05-12 — v0.4 completed.** Agent chat transcripts are persisted, SSE chat streaming is available, evidence clicks can open the PDF viewer, and Field Map edges now include Agent enrichment metadata.
 - **2026-05-12 — v0.3 released.** The Workspace gained a formal right-rail Agent conversation panel with transcript, process cards, status, composer, and paper-scoped chat API.
@@ -416,3 +417,10 @@ Paperflow currently ships two front-ends on top of the same backend agent harnes
 - [x] Add continuous PDF scrolling with toolbar controls for direct page jump and zoom presets (`Fit`, `100%`, `125%`, `150%`).
 - [x] Move the PDF into an independent Workspace pane that becomes a left column on large screens.
 - [x] Keep evidence-driven PDF opening: clicking evidence opens the PDF pane, jumps to the page, and scrolls the highlight into view when bbox data exists.
+
+### v0.6
+
+- [x] Replace serial full-report generation with a staged Agent pipeline: fast paper briefing, parallel chunk extraction, coordinator deduplication, and final synthesis.
+- [x] Share the same paper briefing with every chunk agent so parallel extraction stays globally consistent and avoids repeated claims.
+- [x] Preserve partial reports during extraction while the final coordinator pass merges duplicates, fills missing required sections conservatively, and keeps exact evidence quotes.
+- [x] Add richer generation status messages for briefing, parallel chunk extraction, per-chunk completion, and coordinator synthesis.

@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paperflow README</title>
+    <meta
+      name="description"
+      content="Paperflow README: setup, usage, features, reliability model, architecture, and status."
+    />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #221f1a;
+        --ink-2: #40392f;
+        --muted: #746b5f;
+        --paper: #fbf7ef;
+        --paper-2: #f5eddf;
+        --card: #fffaf1;
+        --rule: #ddd2c0;
+        --rule-strong: #b8a78f;
+        --accent: #8a3d22;
+        --accent-soft: #f3ded0;
+        --green: #3a7658;
+        --blue: #375d8a;
+        --gold: #8a6a22;
+        --shadow: rgba(73, 54, 30, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 10% 0%, rgba(138, 61, 34, 0.12), transparent 28rem),
+          radial-gradient(circle at 90% 12%, rgba(55, 93, 138, 0.1), transparent 24rem),
+          linear-gradient(135deg, var(--paper) 0%, var(--paper-2) 100%);
+        color: var(--ink);
+        font-family: Georgia, "Iowan Old Style", "Songti SC", serif;
+        line-height: 1.62;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      code,
+      pre,
+      .mono,
+      .nav,
+      .button,
+      .eyebrow,
+      .badge,
+      .toc,
+      th {
+        font-family:
+          "JetBrains Mono", "SFMono-Regular", Consolas, ui-monospace, monospace;
+      }
+
+      .shell {
+        min-height: 100dvh;
+      }
+
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 14px clamp(18px, 4vw, 48px);
+        border-bottom: 1px solid rgba(184, 167, 143, 0.6);
+        background: rgba(251, 247, 239, 0.86);
+        backdrop-filter: blur(12px);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: flex-end;
+      }
+
+      .nav a {
+        text-decoration: none;
+        color: var(--muted);
+      }
+
+      .nav a:hover {
+        color: var(--accent);
+      }
+
+      main {
+        width: min(1180px, calc(100% - 36px));
+        margin: 0 auto;
+        padding: clamp(36px, 7vw, 88px) 0 72px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+        gap: clamp(28px, 6vw, 84px);
+        align-items: center;
+      }
+
+      .eyebrow {
+        margin: 0 0 12px;
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        max-width: 12ch;
+        margin: 0 0 18px;
+        font-size: clamp(54px, 10vw, 120px);
+        font-weight: 500;
+        letter-spacing: -0.06em;
+        line-height: 0.9;
+      }
+
+      .lead {
+        max-width: 680px;
+        margin: 0 0 28px;
+        color: var(--ink-2);
+        font-size: clamp(19px, 2.2vw, 25px);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: 0 18px;
+        border: 1px solid var(--ink);
+        color: var(--ink);
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .button.primary {
+        background: var(--ink);
+        color: var(--paper);
+      }
+
+      .button:hover {
+        transform: translateY(-1px);
+      }
+
+      .hero-card {
+        padding: 18px;
+        border: 1px solid var(--rule);
+        background: rgba(255, 250, 241, 0.74);
+        box-shadow: 0 24px 80px var(--shadow);
+      }
+
+      .hero-card img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 1px solid var(--rule);
+      }
+
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 4px 9px;
+        border: 1px solid var(--rule);
+        background: var(--card);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .toc {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 8px;
+        margin: 42px 0 0;
+      }
+
+      .toc a {
+        min-height: 42px;
+        padding: 10px;
+        border: 1px solid var(--rule);
+        background: rgba(255, 250, 241, 0.74);
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 11px;
+        font-weight: 800;
+        text-align: center;
+      }
+
+      .toc a:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      section {
+        scroll-margin-top: 86px;
+      }
+
+      .section {
+        margin-top: clamp(46px, 7vw, 82px);
+        padding-top: 28px;
+        border-top: 1px solid var(--rule-strong);
+      }
+
+      h2 {
+        margin: 0 0 18px;
+        font-size: clamp(30px, 4vw, 48px);
+        font-weight: 500;
+        letter-spacing: -0.035em;
+        line-height: 1;
+      }
+
+      h3 {
+        margin: 0 0 10px;
+        font-size: 19px;
+        line-height: 1.25;
+      }
+
+      p {
+        margin: 0 0 14px;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .grid.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .card,
+      .news-item,
+      .status-block,
+      .code-card {
+        border: 1px solid var(--rule);
+        background: rgba(255, 250, 241, 0.78);
+      }
+
+      .card {
+        padding: 22px;
+      }
+
+      .card strong {
+        display: block;
+        margin-bottom: 10px;
+        color: var(--green);
+        font-family:
+          ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .news {
+        display: grid;
+        gap: 10px;
+      }
+
+      .news-item {
+        display: grid;
+        grid-template-columns: 96px minmax(0, 1fr);
+        gap: 18px;
+        padding: 16px;
+      }
+
+      .news-item time {
+        color: var(--accent);
+        font-family:
+          ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .code-card {
+        overflow: hidden;
+      }
+
+      pre {
+        margin: 0;
+        overflow: auto;
+        padding: 18px;
+        background: #211f1a;
+        color: #f8f0e2;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .steps {
+        counter-reset: step;
+        display: grid;
+        gap: 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .steps li {
+        counter-increment: step;
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        gap: 14px;
+        align-items: start;
+        padding: 16px;
+        border: 1px solid var(--rule);
+        background: rgba(255, 250, 241, 0.72);
+      }
+
+      .steps li::before {
+        content: counter(step, decimal-leading-zero);
+        color: var(--accent);
+        font-family:
+          "JetBrains Mono", "SFMono-Regular", Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid var(--rule);
+        background: rgba(255, 250, 241, 0.78);
+      }
+
+      th,
+      td {
+        padding: 14px;
+        border-bottom: 1px solid var(--rule);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--accent);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .status-block {
+        padding: 18px;
+      }
+
+      .status-block h3 {
+        color: var(--accent);
+      }
+
+      .status-block ul,
+      .card ul {
+        margin: 10px 0 0;
+        padding-left: 1.1rem;
+        color: var(--muted);
+      }
+
+      .callout {
+        margin-top: 26px;
+        padding: 20px;
+        border: 1px solid var(--accent);
+        background: var(--accent-soft);
+      }
+
+      footer {
+        margin-top: 72px;
+        padding-top: 24px;
+        border-top: 1px solid var(--rule);
+        color: var(--muted);
+        font-family:
+          ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 13px;
+      }
+
+      @media (max-width: 920px) {
+        .hero,
+        .grid,
+        .grid.two,
+        .status-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .toc {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .news-item {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .nav {
+          position: static;
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .toc {
+          grid-template-columns: 1fr;
+        }
+
+        main {
+          width: min(100% - 24px, 1180px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="nav" aria-label="README navigation">
+        <a href="./index.html">Paperflow</a>
+        <div class="nav-links">
+          <a href="#quickstart">Quickstart</a>
+          <a href="#features">Features</a>
+          <a href="#architecture">Architecture</a>
+          <a href="#status">Status</a>
+          <a href="./README.zh-CN.md">中文</a>
+        </div>
+      </nav>
+
+      <main>
+        <section class="hero">
+          <div>
+            <p class="eyebrow">HTML README</p>
+            <h1>Paperflow</h1>
+            <p class="lead">
+              Evidence-first paper reading, citation-aware search, Field Maps,
+              and Obsidian export in a local-first research workspace.
+            </p>
+            <div class="actions">
+              <a class="button primary" href="https://github.com/shiml20/Paperflow">View on GitHub</a>
+              <a class="button" href="#quickstart">Start locally</a>
+              <a class="button" href="./README.md">Raw Markdown</a>
+            </div>
+          </div>
+
+          <aside class="hero-card" aria-label="Paperflow product preview">
+            <img src="./assets/paperflow_banner.png" alt="Paperflow product banner" />
+            <div class="badges" aria-label="Project badges">
+              <span class="badge">R0 / R1 / R2</span>
+              <span class="badge">DeepSeek</span>
+              <span class="badge">FastAPI</span>
+              <span class="badge">React</span>
+              <span class="badge">Obsidian</span>
+            </div>
+          </aside>
+        </section>
+
+        <div class="toc" aria-label="README table of contents">
+          <a href="#what">What it is</a>
+          <a href="#news">News</a>
+          <a href="#quickstart">Quickstart</a>
+          <a href="#features">Features</a>
+          <a href="#reliability">Reliability</a>
+          <a href="#status">Status</a>
+        </div>
+
+        <section class="section" id="what">
+          <p class="eyebrow">What is Paperflow</p>
+          <h2>Report first, chat second, evidence always.</h2>
+          <div class="grid">
+            <article class="card">
+              <strong>Import</strong>
+              <p>Bring in a local PDF, arXiv URL, DOI, OpenReview link, Semantic Scholar page, or Zotero entry.</p>
+            </article>
+            <article class="card">
+              <strong>Read</strong>
+              <p>Generate a structured Reading Report with claims, reliability labels, evidence quotes, and PDF locations.</p>
+            </article>
+            <article class="card">
+              <strong>Keep</strong>
+              <p>Persist PDFs, reports, SQLite metadata, chat transcripts, Field Maps, and Obsidian-native notes locally.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="news">
+          <p class="eyebrow">News</p>
+          <h2>Latest updates</h2>
+          <div class="news">
+            <article class="news-item">
+              <time>v0.6</time>
+              <p>Report generation now uses fast briefing, parallel chunk extraction, and coordinator synthesis to reduce wait time while preserving global consistency.</p>
+            </article>
+            <article class="news-item">
+              <time>v0.5</time>
+              <p>The Workspace now supports a high-resolution continuous PDF pane, page jump, zoom controls, evidence-centered scrolling, and a large-screen three-column layout.</p>
+            </article>
+            <article class="news-item">
+              <time>v0.4</time>
+              <p>Agent chat transcripts are persisted, SSE chat streaming is available, evidence clicks can open the PDF viewer, and Field Map edges include Agent enrichment metadata.</p>
+            </article>
+            <article class="news-item">
+              <time>v0.3</time>
+              <p>The Workspace gained a formal right-rail Agent conversation panel with transcript, process cards, status, composer, and paper-scoped chat API.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="quickstart">
+          <p class="eyebrow">Quickstart</p>
+          <h2>Run Paperflow locally</h2>
+          <p class="muted">
+            Requirements: Python 3.9+, Node.js 18+, and a DeepSeek API key for real Agent parsing.
+          </p>
+          <div class="code-card" aria-label="Quickstart commands">
+            <pre><code>git clone https://github.com/shiml20/PaperFlow.git
+cd PaperFlow
+
+export DEEPSEEK_API_KEY="your-deepseek-api-key"
+cd paperflow
+./run-dev.sh --install</code></pre>
+          </div>
+          <p class="callout">
+            Then open <code>http://127.0.0.1:5173</code>, import a PDF or arXiv URL,
+            and open the Workspace.
+          </p>
+        </section>
+
+        <section class="section" id="usage">
+          <p class="eyebrow">How to use</p>
+          <h2>From paper to knowledge base</h2>
+          <ol class="steps">
+            <li>Import a local PDF or paste an arXiv URL.</li>
+            <li>Watch the Agent move from PDF parsing to dynamic partial reports.</li>
+            <li>Read first key findings while the full report continues to fill in.</li>
+            <li>Open the completed Reading Report and inspect R0 / R1 / R2 claims.</li>
+            <li>Click a claim or evidence item to inspect source text and PDF location.</li>
+            <li>Ask the Agent a focused question grounded in the current paper.</li>
+            <li>Save or update the Obsidian note.</li>
+          </ol>
+        </section>
+
+        <section class="section" id="features">
+          <p class="eyebrow">Core features</p>
+          <h2>A research workspace, not a generic summarizer.</h2>
+          <div class="grid two">
+            <article class="card">
+              <strong>Dynamic Reading Reports</strong>
+              <ul>
+                <li>Chunked full-paper reading with v0.6 briefing and coordinator synthesis.</li>
+                <li>Dynamic partial reports, coverage-aware generation, and live parsing metrics.</li>
+                <li>Transparent process output for PDF extraction, DeepSeek stages, persistence, and failure states.</li>
+              </ul>
+            </article>
+            <article class="card">
+              <strong>Evidence-first Workspace</strong>
+              <ul>
+                <li>R0 / R1 / R2 reliability badges in UI and data model.</li>
+                <li>Evidence quote, page, section, bbox, and location status for claims.</li>
+                <li>PDF.js reader with continuous scroll, zoom, page jump, bbox highlight, and select-to-ask.</li>
+              </ul>
+            </article>
+            <article class="card">
+              <strong>Agent Conversation</strong>
+              <ul>
+                <li>Right-rail Agent panel with transcript, process cards, status, and composer.</li>
+                <li>Chat transcripts persisted in SQLite and restored per paper.</li>
+                <li>SSE step/final events for streaming paper-scoped chat.</li>
+              </ul>
+            </article>
+            <article class="card">
+              <strong>Literature Context And Field Maps</strong>
+              <ul>
+                <li>Metadata import, content deduplication, and six-lane R1 search.</li>
+                <li>Field Maps with milestones, timelines, task taxonomy, datasets, methods, and opportunities.</li>
+                <li>Agent-enriched lineage graph edges with rationale and confidence.</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="reliability">
+          <p class="eyebrow">Reliability model</p>
+          <h2>Every claim has a source contract.</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Level</th>
+                <th>Meaning</th>
+                <th>Typical use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>R0</strong></td>
+                <td>Strictly grounded in the current paper.</td>
+                <td>Claims with direct evidence quotes and PDF locations.</td>
+              </tr>
+              <tr>
+                <td><strong>R1</strong></td>
+                <td>Grounded in another paper or external source fetched through search.</td>
+                <td>Related-work context, benchmark origins, citation-backed comparisons.</td>
+              </tr>
+              <tr>
+                <td><strong>R2</strong></td>
+                <td>Inference, trend judgement, or research opinion.</td>
+                <td>Opportunities, synthesis, and uncertain claims shown with explicit caution.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="deepseek">
+          <p class="eyebrow">DeepSeek setup</p>
+          <h2>Agent configuration</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Variable</th>
+                <th>Default</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>DEEPSEEK_API_KEY</code></td>
+                <td>none</td>
+                <td>DeepSeek API key used by the backend PaperAgent.</td>
+              </tr>
+              <tr>
+                <td><code>DEEPSEEK_BASE_URL</code></td>
+                <td><code>https://api.deepseek.com/beta</code></td>
+                <td>DeepSeek-compatible chat completions endpoint root.</td>
+              </tr>
+              <tr>
+                <td><code>DEEPSEEK_MODEL</code></td>
+                <td><code>deepseek-v4-flash</code></td>
+                <td>Model used for Reading Report generation.</td>
+              </tr>
+              <tr>
+                <td><code>DEEPSEEK_REPORT_READ_TIMEOUT</code></td>
+                <td><code>90</code></td>
+                <td>Read timeout in seconds for report generation.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="architecture">
+          <p class="eyebrow">Architecture</p>
+          <h2>Local-first, agent-backed.</h2>
+          <div class="grid">
+            <article class="card">
+              <strong>Frontend</strong>
+              <p>React + Vite web app for library, report, PDF workspace, Agent chat, Field Map, and runtime configuration.</p>
+            </article>
+            <article class="card">
+              <strong>Backend</strong>
+              <p>FastAPI service with PDF parsing, DeepSeek PaperAgent, R1 search, Field Map, chat, task queue, and Obsidian export.</p>
+            </article>
+            <article class="card">
+              <strong>Storage</strong>
+              <p>SQLite metadata plus local PDFs, JSON reports, parsed chunks, R1 cache, task snapshots, and Markdown notes.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="status">
+          <p class="eyebrow">Status</p>
+          <h2>Pre-1.0 milestones</h2>
+          <div class="status-grid">
+            <article class="status-block">
+              <h3>v0.6</h3>
+              <ul>
+                <li>Fast paper briefing before detailed extraction.</li>
+                <li>Parallel chunk extraction with shared briefing.</li>
+                <li>Coordinator deduplication and final synthesis.</li>
+                <li>Richer generation progress messages.</li>
+              </ul>
+            </article>
+            <article class="status-block">
+              <h3>v0.5</h3>
+              <ul>
+                <li>High-resolution continuous PDF viewer.</li>
+                <li>Page jump and zoom presets.</li>
+                <li>Three-column large-screen reading layout.</li>
+                <li>Evidence-driven PDF navigation and highlight scrolling.</li>
+              </ul>
+            </article>
+            <article class="status-block">
+              <h3>v0.4</h3>
+              <ul>
+                <li>Persistent Agent chat transcripts.</li>
+                <li>SSE chat events and final transcript sync.</li>
+                <li>PDF evidence interactions.</li>
+                <li>Agent-enriched Field Map lineage graph edges.</li>
+              </ul>
+            </article>
+            <article class="status-block">
+              <h3>v0.3 and earlier</h3>
+              <ul>
+                <li>Right-rail Agent workspace.</li>
+                <li>Evidence workflow and metadata import.</li>
+                <li>R1 search, Field Map, compare, and R2 insights.</li>
+                <li>Local Obsidian export.</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <footer>
+          Paperflow is licensed under PolyForm Noncommercial 1.0.0 and is research-only by default.
+          See the <a href="./README.md">Markdown README</a> for the full project details.
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

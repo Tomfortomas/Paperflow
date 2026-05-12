@@ -36,18 +36,17 @@ class ReportService:
             on_progress(_deepseek_wait_message(model=model, text=text))
         agent_params = inspect.signature(self.agent.generate_reading_report).parameters
         if "on_partial_report" in agent_params:
-            report = self.agent.generate_reading_report(
-                paper_id=session.paper.id,
-                source_name=session.paper.pdf_path.name,
-                paper_text=text,
-                on_partial_report=on_partial_report,
-            )
+            kwargs = {"on_partial_report": on_partial_report}
         else:
-            report = self.agent.generate_reading_report(
-                paper_id=session.paper.id,
-                source_name=session.paper.pdf_path.name,
-                paper_text=text,
-            )
+            kwargs = {}
+        if "on_progress" in agent_params:
+            kwargs["on_progress"] = on_progress
+        report = self.agent.generate_reading_report(
+            paper_id=session.paper.id,
+            source_name=session.paper.pdf_path.name,
+            paper_text=text,
+            **kwargs,
+        )
         if on_progress is not None:
             on_progress("DeepSeek report received; locating evidence")
         if parsed is not None and parsed.chunks:

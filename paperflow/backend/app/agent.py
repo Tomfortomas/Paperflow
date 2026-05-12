@@ -13,6 +13,7 @@ class PaperAgent(Protocol):
         source_name: str,
         paper_text: str,
         on_partial_report: Optional[Callable[["ReadingReport"], None]] = None,
+        on_progress: Optional[Callable[[str], None]] = None,
     ) -> ReadingReport:
         ...
 
@@ -27,12 +28,14 @@ class DeepSeekPaperAgent:
         source_name: str,
         paper_text: str,
         on_partial_report: Optional[Callable[[ReadingReport], None]] = None,
+        on_progress: Optional[Callable[[str], None]] = None,
     ) -> ReadingReport:
         return self.client.generate_reading_report(
             paper_id=paper_id,
             source_name=source_name,
             paper_text=paper_text,
             on_partial_report=on_partial_report,
+            on_progress=on_progress,
         )
 
 

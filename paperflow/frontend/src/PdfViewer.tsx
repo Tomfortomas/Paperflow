@@ -7,7 +7,14 @@
  *   2. Vite can code-split the heavy worker bundle.
  */
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type WheelEvent as ReactWheelEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 export interface PdfBboxHighlight {
   page: number;
@@ -140,8 +147,39 @@ export function PdfViewer({
     goToPage(parsed);
   }
 
+  function handleWheel(event: ReactWheelEvent<HTMLDivElement>) {
+    const scroller = pagesRef.current;
+    if (!scroller) return;
+
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest("input, select, textarea")) {
+      return;
+    }
+
+    const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    const maxLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    if (maxTop === 0 && maxLeft === 0) return;
+
+    const nextTop = clampScroll(
+      scroller.scrollTop + normalizeWheelDelta(event.deltaY, event.deltaMode, scroller.clientHeight),
+      maxTop,
+    );
+    const nextLeft = clampScroll(
+      scroller.scrollLeft + normalizeWheelDelta(event.deltaX, event.deltaMode, scroller.clientWidth),
+      maxLeft,
+    );
+
+    if (nextTop === scroller.scrollTop && nextLeft === scroller.scrollLeft) {
+      return;
+    }
+
+    event.preventDefault();
+    scroller.scrollTop = nextTop;
+    scroller.scrollLeft = nextLeft;
+  }
+
   return (
-    <div className="pdf-viewer" ref={containerRef}>
+    <div className="pdf-viewer" ref={containerRef} onWheel={handleWheel}>
       <div className="pdf-viewer-toolbar">
         <button
           type="button"
@@ -379,6 +417,20 @@ function scaleForContainer(containerWidth: number, pageWidth: number): number {
 
 function clampPage(value: number, maxPage: number): number {
   return Math.max(1, Math.min(value, Math.max(1, maxPage)));
+}
+
+function clampScroll(value: number, maxValue: number): number {
+  return Math.max(0, Math.min(value, maxValue));
+}
+
+function normalizeWheelDelta(delta: number, deltaMode: number, pageSize: number): number {
+  if (deltaMode === 1) {
+    return delta * 16;
+  }
+  if (deltaMode === 2) {
+    return delta * pageSize;
+  }
+  return delta;
 }
 
 function effectivePageBbox(

@@ -102,13 +102,28 @@ REPORT_TIMEOUT_MESSAGE = (
 )
 
 
+class ReportGenerationCancelled(Exception):
+    pass
+
+
 def _report_progress_for_message(message: str) -> float:
     if message.startswith("PDF text extraction completed"):
         return 0.25
     if message.startswith("DeepSeek request prepared"):
         return 0.32
+    if message.startswith("DeepSeek briefing is running"):
+        return 0.34
     if message.startswith("DeepSeek report generation is running"):
         return 0.35
+    if message.startswith("DeepSeek parallel chunk extraction is running"):
+        return 0.38
+    chunk_match = re.match(r"^DeepSeek chunk completed \(chunk=(\d+)/(\d+)\)$", message)
+    if chunk_match:
+        done = int(chunk_match.group(1))
+        total = max(1, int(chunk_match.group(2)))
+        return min(0.86, 0.4 + 0.44 * (done / total))
+    if message.startswith("DeepSeek coordinator synthesis is running"):
+        return 0.88
     if message == "DeepSeek report received; locating evidence":
         return 0.92
     if message == "Evidence locations resolved; saving report":
@@ -297,7 +312,16 @@ def create_app(
         return session
 
     def run_report_task(session: PaperSession, handle=None) -> Optional[str]:
+        def abort_if_cancelled() -> None:
+            if handle is not None and handle.is_cancelled():
+                storage.update_status(
+                    session.paper.id,
+                    TaskStatus(stage="failed", message="Report generation cancelled.", progress=1.0),
+                )
+                raise ReportGenerationCancelled()
+
         def update_agent_progress(message: str) -> None:
+            abort_if_cancelled()
             progress = _report_progress_for_message(message)
             storage.update_status(
                 session.paper.id,
@@ -311,6 +335,7 @@ def create_app(
                 handle.progress(progress, message)
 
         def save_partial_report(partial: ReadingReport) -> None:
+            abort_if_cancelled()
             if partial.agent_run is None:
                 partial.agent_run = AgentRunMetrics()
             partial.agent_run.elapsed_seconds = round(time.perf_counter() - started_at, 2)
@@ -340,6 +365,7 @@ def create_app(
             handle.progress(0.15, REPORT_PREPARING_MESSAGE)
         started_at = time.perf_counter()
         try:
+            abort_if_cancelled()
             report_params = inspect.signature(report_service.generate_report).parameters
             kwargs = {}
             if "on_progress" in report_params:
@@ -347,6 +373,9 @@ def create_app(
             if "on_partial_report" in report_params:
                 kwargs["on_partial_report"] = save_partial_report
             report = report_service.generate_report(session, **kwargs)
+            abort_if_cancelled()
+        except ReportGenerationCancelled:
+            return None
         except httpx.ReadTimeout:
             storage.update_status(
                 session.paper.id,

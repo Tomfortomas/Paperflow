@@ -27,7 +27,7 @@ from app.r1_clients import (
     SemanticScholarClient,
 )
 from app.r1_search import R1SearchPipeline
-from app.refs_parser import extract_references
+from app.refs_parser import ParsedReference, extract_references
 from app.report_service import ReportService
 
 
@@ -380,6 +380,80 @@ def test_r1_pipeline_merges_lanes_and_sets_comparison_risk() -> None:
     # Query trace lists each lane that ran.
     lanes = {entry.lane for entry in result.query_trace}
     assert {"backward", "forward", "survey", "recent"}.issubset(lanes)
+
+
+class _FakeS2ForParsedRefs:
+    def resolve(self, paper_id: str):
+        if paper_id == "ARXIV:2505.13388":
+            return {
+                "paperId": "S2-REF",
+                "title": "Training Language Models to Reason with Verifiable Rewards",
+                "authors": [{"name": "Z. Anugraha"}],
+                "year": 2025,
+                "venue": "arXiv",
+                "externalIds": {"ArXiv": "2505.13388"},
+                "tldr": {"text": "Studies verifiable reward training."},
+                "citationCount": 6,
+                "influentialCitationCount": 0,
+            }
+        return None
+
+    def references(self, paper_id: str, limit: int = 50):
+        return []
+
+    def citations(self, paper_id: str, limit: int = 50):
+        return []
+
+    def search(self, query: str, limit: int = 20, lane: str = "search"):
+        return []
+
+    def close(self) -> None:
+        pass
+
+
+def test_r1_pipeline_resolves_local_refs_before_showing_author_stub() -> None:
+    pipeline = R1SearchPipeline(
+        semantic_scholar=_FakeS2ForParsedRefs(),  # type: ignore[arg-type]
+        openalex=_FakeOA(),  # type: ignore[arg-type]
+        papers_with_code=_FakePwC(),  # type: ignore[arg-type]
+    )
+    metadata = PaperMetadata(source_type=ImportSourceType.LOCAL_PDF)
+    parsed_ref = ParsedReference(
+        raw="Anugraha, Z. 2025 arXiv:2505.13388",
+        index=1,
+        title="Anugraha, Z",
+        authors=["Anugraha, Z"],
+        year=2025,
+        arxiv_id="2505.13388",
+    )
+
+    result = pipeline.search(metadata, parsed_refs=[parsed_ref])
+
+    assert result.items[0].title == "Training Language Models to Reason with Verifiable Rewards"
+    assert result.items[0].source == "semanticscholar:references"
+    assert result.items[0].arxiv_id == "2505.13388"
+
+
+def test_r1_pipeline_marks_unresolved_author_only_local_refs() -> None:
+    pipeline = R1SearchPipeline(
+        semantic_scholar=_FakeS2ForParsedRefs(),  # type: ignore[arg-type]
+        openalex=_FakeOA(),  # type: ignore[arg-type]
+        papers_with_code=_FakePwC(),  # type: ignore[arg-type]
+    )
+    metadata = PaperMetadata(source_type=ImportSourceType.LOCAL_PDF)
+    parsed_ref = ParsedReference(
+        raw="Chen, G. 2025 arXiv:2505.02387",
+        index=2,
+        title="Chen, G",
+        authors=["Chen, G"],
+        year=2025,
+        arxiv_id="2505.02387",
+    )
+
+    result = pipeline.search(metadata, parsed_refs=[parsed_ref])
+
+    assert result.items[0].title == "Unresolved reference (arXiv:2505.02387)"
+    assert result.items[0].source == "local-refs"
 
 
 # --------------------------------------------------------------- API

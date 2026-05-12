@@ -164,9 +164,19 @@ def _split_authors_and_title(text: str, *, year: Optional[int]) -> tuple[List[st
     when no clear separator can be found.
     """
 
-    pieces = [p.strip() for p in re.split(r"\.\s+(?=[A-Z])", text) if p.strip()]
+    authors = _split_authors(_author_segment(text, year=year))
+
+    if year:
+        post_year = _title_after_year(text, year)
+        if post_year and not _looks_like_author_stub(post_year, authors):
+            return authors, post_year
+
+    pieces = [p.strip() for p in re.split(r"(?<!\b[A-Z])\.\s+(?=[A-Z0-9])", text) if p.strip()]
     if len(pieces) < 2:
-        return [], text or None
+        title = text or None
+        if title and _looks_like_author_stub(title, authors):
+            return authors, None
+        return authors, title
 
     author_segment = pieces[0]
     title_candidate: Optional[str] = None
@@ -174,13 +184,101 @@ def _split_authors_and_title(text: str, *, year: Optional[int]) -> tuple[List[st
         # Skip year-only segments.
         if year and piece.strip().startswith(str(year)):
             continue
+        piece = _clean_title_candidate(piece)
         if len(piece) < 5:
+            continue
+        if _looks_like_author_stub(piece, authors):
             continue
         title_candidate = piece.rstrip(".")
         break
 
     authors = _split_authors(author_segment)
-    return authors, title_candidate or text
+    if title_candidate:
+        return authors, title_candidate
+    if text and not _looks_like_author_stub(text, authors):
+        return authors, text
+    return authors, None
+
+
+def _author_segment(text: str, *, year: Optional[int]) -> str:
+    if year:
+        year_match = _YEAR_RE.search(text)
+        if year_match:
+            return text[: year_match.start()]
+    first_sentence = re.split(r"(?<!\b[A-Z])\.\s+(?=[A-Z0-9])", text, maxsplit=1)
+    return first_sentence[0] if first_sentence else text
+
+
+def _title_after_year(text: str, year: int) -> Optional[str]:
+    match = _YEAR_RE.search(text)
+    if match is None:
+        return None
+    tail = text[match.end() :]
+    tail = tail.lstrip(").,;: -")
+    return _first_title_segment(tail)
+
+
+def _first_title_segment(text: str) -> Optional[str]:
+    for piece in re.split(r"(?<!\b[A-Z])\.\s+(?=[A-Z0-9])", text):
+        cleaned = _clean_title_candidate(piece)
+        if not cleaned:
+            continue
+        if _is_metadata_segment(cleaned):
+            continue
+        return cleaned
+    cleaned = _clean_title_candidate(text)
+    return cleaned if cleaned and not _is_metadata_segment(cleaned) else None
+
+
+def _clean_title_candidate(value: str) -> str:
+    value = re.sub(r"\s+", " ", value).strip(" .")
+    value = re.sub(r"\bdoi:\s*\S+.*$", "", value, flags=re.IGNORECASE).strip(" .")
+    value = re.sub(r"\barxiv:\s*\S+.*$", "", value, flags=re.IGNORECASE).strip(" .")
+    value = re.sub(r"\bhttps?://\S+.*$", "", value, flags=re.IGNORECASE).strip(" .")
+    return value
+
+
+def _is_metadata_segment(value: str) -> bool:
+    lowered = value.lower().strip()
+    if not lowered:
+        return True
+    if _YEAR_RE.fullmatch(lowered):
+        return True
+    if lowered.startswith(("doi:", "arxiv:", "http://", "https://")):
+        return True
+    return lowered in {
+        "neurips",
+        "icml",
+        "iclr",
+        "acl",
+        "emnlp",
+        "naacl",
+        "cvpr",
+        "iccv",
+        "eccv",
+        "aaai",
+        "ijcai",
+        "arxiv",
+    }
+
+
+def _looks_like_author_stub(value: str, authors: List[str]) -> bool:
+    candidate = re.sub(r"\s+", " ", value).strip(" .")
+    if not candidate or len(candidate) > 80:
+        return False
+    if ":" in candidate and not re.search(r"\b[A-Z]\.?\b", candidate):
+        return False
+    if candidate in authors:
+        return True
+    if "," not in candidate and len(candidate.split()) > 3:
+        return False
+    return bool(
+        re.fullmatch(
+            r"[A-Z][A-Za-z'`-]+(?:\s+[A-Z][A-Za-z'`-]+)?"
+            r"(?:,\s*(?:[A-Z]\.?|[A-Z][A-Za-z'`-]+))*",
+            candidate,
+        )
+    )
 
 
 def _split_authors(segment: str) -> List[str]:

@@ -19,9 +19,10 @@ shared task/dataset signals.
 from __future__ import annotations
 
 import time
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterable, List, Optional, Sequence
+from typing import Any, Iterable, List, Optional, Sequence
 
 from app.models import Evidence, EvidenceLocationStatus, PaperMetadata, ReliabilityLevel, RelatedWorkItem
 from app.r1_clients import (
@@ -170,7 +171,7 @@ class R1SearchPipeline:
                 )
         if not candidates and parsed_refs:
             for ref in parsed_refs[: self.limits["backward"]]:
-                candidates.append(_candidate_from_ref(ref))
+                candidates.append(self._candidate_from_parsed_ref(ref))
             result.query_trace.append(
                 R1QueryTraceEntry(
                     lane="backward",
@@ -180,6 +181,14 @@ class R1SearchPipeline:
                 )
             )
         return candidates
+
+    def _candidate_from_parsed_ref(self, ref: ParsedReference) -> R1Candidate:
+        for identifier in _reference_identifiers(ref):
+            resolved = self.s2.resolve(identifier)
+            candidate = _candidate_from_resolved_ref(resolved)
+            if candidate is not None:
+                return candidate
+        return _candidate_from_ref(ref)
 
     def _run_forward(
         self,
@@ -367,13 +376,74 @@ def _score(candidate: R1Candidate) -> int:
 
 def _candidate_from_ref(ref: ParsedReference) -> R1Candidate:
     return R1Candidate(
-        title=ref.title or ref.raw,
+        title=_local_ref_title(ref),
         source="local-refs",
         authors=ref.authors,
         year=ref.year,
         doi=ref.doi.lower() if ref.doi else None,
         arxiv_id=ref.arxiv_id,
         relation="cited reference (parsed locally)",
+    )
+
+
+def _reference_identifiers(ref: ParsedReference) -> List[str]:
+    identifiers: List[str] = []
+    if ref.doi:
+        identifiers.append(f"DOI:{ref.doi}")
+    if ref.arxiv_id:
+        identifiers.append(f"ARXIV:{ref.arxiv_id}")
+    return identifiers
+
+
+def _candidate_from_resolved_ref(paper: Optional[dict[str, Any]]) -> Optional[R1Candidate]:
+    if not paper or not paper.get("title"):
+        return None
+    external = paper.get("externalIds") or {}
+    tldr_obj = paper.get("tldr") or {}
+    return R1Candidate(
+        title=paper.get("title") or "",
+        source="semanticscholar:references",
+        authors=[a.get("name") for a in paper.get("authors") or [] if a.get("name")],
+        year=paper.get("year"),
+        venue=paper.get("venue"),
+        doi=(external.get("DOI") or "").lower() or None,
+        arxiv_id=external.get("ArXiv"),
+        semantic_scholar_id=paper.get("paperId"),
+        url=f"https://www.semanticscholar.org/paper/{paper.get('paperId')}" if paper.get("paperId") else None,
+        tldr=tldr_obj.get("text") if isinstance(tldr_obj, dict) else None,
+        citation_count=paper.get("citationCount"),
+        influential_citation_count=paper.get("influentialCitationCount"),
+        relation="cited reference",
+    )
+
+
+def _local_ref_title(ref: ParsedReference) -> str:
+    title = (ref.title or "").strip()
+    if title and not _looks_like_author_stub(title, ref.authors):
+        return title
+    if ref.arxiv_id:
+        return f"Unresolved reference (arXiv:{ref.arxiv_id})"
+    if ref.doi:
+        return f"Unresolved reference (DOI:{ref.doi})"
+    if ref.index:
+        return f"Unresolved reference [{ref.index}]"
+    return "Unresolved reference"
+
+
+def _looks_like_author_stub(value: str, authors: Sequence[str]) -> bool:
+    candidate = " ".join(value.strip(" .").split())
+    if not candidate or len(candidate) > 80:
+        return False
+    if candidate in authors:
+        return True
+    if "," not in candidate and len(candidate.split()) > 3:
+        return False
+    return bool(
+        re.fullmatch(
+            r"[A-Z][A-Za-z'`-]+(?:\s+[A-Z][A-Za-z'`-]+)?"
+            r"(?:,\s*(?:[A-Z]\.?|[A-Z][A-Za-z'`-]+))*",
+            candidate,
+        )
     )
 
 
