@@ -40,6 +40,7 @@ Paperflow 把读论文变成一个可追溯、可积累的本地研究流程：
 
 ## News
 
+- **2026-05-12 — v0.5 完成。** Workspace 支持高清连续滚动 PDF pane、页码跳转、缩放控件、证据居中滚动，以及大屏三栏阅读布局。
 - **2026-05-12 — v0.4 完成。** Agent Chat 已持久化，支持 SSE 对话流，evidence 可打开 PDF 并跳页，Field Map 关系边加入 Agent enrichment 元数据。
 - **2026-05-12 — v0.3 发布。** Workspace 右侧升级为正式 Agent 对话栏，包含 transcript、process cards、status、composer 和 paper-scoped chat API。
 - **2026-05-12 — v0.2 完成。** Evidence workflow、metadata import、R1 search、Field Map、compare、R2 insights、task queue 全部落地。
@@ -408,3 +409,10 @@ Paperflow 当前有两个前端，共用同一个后端 Agent harness：
 - [x] Add SSE streaming for Agent chat step/final events, with frontend stream consumption and final transcript sync.
 - [x] Deepen PDF evidence interactions: evidence detail can open the PDF viewer, jump to the evidence page, and reuse bbox highlights when available.
 - [x] Add Agent-enriched Field Map / lineage graph edges with source type, rationale, confidence, and UI labels that distinguish Agent suggestions from rule-derived relations.
+
+### v0.5
+
+- [x] PDF 页面按 device-pixel-ratio 渲染，Retina 和大屏下文字更清晰。
+- [x] PDF 支持连续滚动阅读，toolbar 支持直接输入页码跳转，并提供 `Fit`、`100%`、`125%`、`150%` 缩放预设。
+- [x] PDF 从报告流中独立成 Workspace pane，大屏下变成左侧栏。
+- [x] 保留 evidence-driven PDF 打开逻辑：点击 evidence 会打开 PDF pane、跳到对应页，并在有 bbox 时把高亮滚到视野中。

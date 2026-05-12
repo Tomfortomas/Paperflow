@@ -1,17 +1,13 @@
 /**
- * Lightweight PDF.js viewer with page jump, bbox highlight, and select-to-ask.
- *
- * The component is intentionally minimal — it renders one page at a time on a
- * <canvas> with a transparent text layer above it so the user can select text
- * with the mouse. The selection is bubbled up via `onSelection` and Paperflow
- * sends it to the backend's `/ask-selection` endpoint.
+ * Lightweight PDF.js viewer with continuous scrolling, page jump, bbox
+ * highlight, and select-to-ask.
  *
  * PDF.js is loaded with a dynamic import so that:
  *   1. SSR / jsdom test environments don't choke on its worker setup.
  *   2. Vite can code-split the heavy worker bundle.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 export interface PdfBboxHighlight {
   page: number;
@@ -28,32 +24,41 @@ interface PdfViewerProps {
   onPageChange?: (page: number) => void;
 }
 
+type PdfModule = typeof import("pdfjs-dist");
+type PdfDocument = import("pdfjs-dist").PDFDocumentProxy;
+
 export function PdfViewer({
   pdfUrl,
   page,
   highlight,
   pageSizes,
-  scale = 1.25,
+  scale = 1.4,
   onSelection,
   onPageChange,
 }: PdfViewerProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const textLayerRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [pdfModule, setPdfModule] = useState<typeof import("pdfjs-dist") | null>(null);
-  const [pdfDoc, setPdfDoc] = useState<import("pdfjs-dist").PDFDocumentProxy | null>(null);
+  const pagesRef = useRef<HTMLDivElement | null>(null);
+  const pageRefs = useRef(new Map<number, HTMLElement>());
+  const [pdfModule, setPdfModule] = useState<PdfModule | null>(null);
+  const [pdfDoc, setPdfDoc] = useState<PdfDocument | null>(null);
   const [numPages, setNumPages] = useState(0);
-  const [renderedSize, setRenderedSize] = useState<{ width: number; height: number } | null>(null);
-  const [renderedScale, setRenderedScale] = useState(scale);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [pageInput, setPageInput] = useState(String(page));
+  const [zoom, setZoom] = useState("fit");
   const [error, setError] = useState<string | null>(null);
 
-  // Load PDF.js + the document once per pdfUrl.
+  const safePage = clampPage(page, numPages || page);
+  const pageNumbers = useMemo(
+    () => Array.from({ length: numPages }, (_, index) => index + 1),
+    [numPages],
+  );
+
   useEffect(() => {
     let cancelled = false;
     setError(null);
     setPdfDoc(null);
     setNumPages(0);
+    pageRefs.current.clear();
 
     (async () => {
       try {
@@ -102,46 +107,194 @@ export function PdfViewer({
     return () => observer.disconnect();
   }, []);
 
-  // Render the active page whenever pdfDoc or `page` changes.
   useEffect(() => {
-    if (!pdfDoc || !pdfModule || !canvasRef.current) {
+    setPageInput(String(safePage));
+  }, [safePage]);
+
+  useEffect(() => {
+    scrollToPage(safePage, "auto");
+  }, [safePage, numPages, zoom]);
+
+  function scrollToPage(targetPage: number, behavior: ScrollBehavior = "smooth") {
+    const element = pageRefs.current.get(targetPage);
+    if (!element) return;
+    window.requestAnimationFrame(() => {
+      element.scrollIntoView({ block: "start", inline: "center", behavior });
+    });
+  }
+
+  function goToPage(targetPage: number) {
+    const nextPage = clampPage(targetPage, numPages || targetPage);
+    setPageInput(String(nextPage));
+    onPageChange?.(nextPage);
+    scrollToPage(nextPage);
+  }
+
+  function handlePageSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = Number.parseInt(pageInput, 10);
+    if (!Number.isFinite(parsed)) {
+      setPageInput(String(safePage));
       return;
     }
-    const safePage = Math.max(1, Math.min(page, numPages || page));
+    goToPage(parsed);
+  }
+
+  return (
+    <div className="pdf-viewer" ref={containerRef}>
+      <div className="pdf-viewer-toolbar">
+        <button
+          type="button"
+          onClick={() => goToPage(safePage - 1)}
+          disabled={safePage <= 1}
+        >
+          ‹ Prev
+        </button>
+        <span className="pdf-viewer-page-indicator">
+          Page {safePage}
+          {numPages ? ` / ${numPages}` : ""}
+        </span>
+        <form className="pdf-viewer-page-form" onSubmit={handlePageSubmit}>
+          <label>
+            <span>PDF page</span>
+            <input
+              aria-label="PDF page"
+              inputMode="numeric"
+              min={1}
+              max={numPages || undefined}
+              value={pageInput}
+              onChange={(event) => setPageInput(event.target.value)}
+            />
+          </label>
+          <button type="submit">Go</button>
+        </form>
+        <button
+          type="button"
+          onClick={() => goToPage(safePage + 1)}
+          disabled={numPages > 0 && safePage >= numPages}
+        >
+          Next ›
+        </button>
+        <label className="pdf-viewer-zoom">
+          <span>Zoom</span>
+          <select
+            aria-label="PDF zoom"
+            value={zoom}
+            onChange={(event) => setZoom(event.target.value)}
+          >
+            <option value="fit">Fit</option>
+            <option value="100">100%</option>
+            <option value="125">125%</option>
+            <option value="150">150%</option>
+          </select>
+        </label>
+      </div>
+      {error ? <p className="warning">{error}</p> : null}
+      <div className="pdf-viewer-pages" ref={pagesRef} aria-label="PDF pages">
+        {pdfDoc && pdfModule
+          ? pageNumbers.map((pageNumber) => (
+              <PdfPage
+                containerWidth={containerWidth}
+                highlight={highlight}
+                key={pageNumber}
+                maxFitScale={scale}
+                onPageElement={(element) => {
+                  if (element) {
+                    pageRefs.current.set(pageNumber, element);
+                  } else {
+                    pageRefs.current.delete(pageNumber);
+                  }
+                }}
+                onSelection={onSelection}
+                pageNumber={pageNumber}
+                pageSizes={pageSizes}
+                pdfDoc={pdfDoc}
+                pdfModule={pdfModule}
+                zoom={zoom}
+              />
+            ))
+          : null}
+      </div>
+    </div>
+  );
+}
+
+function PdfPage({
+  containerWidth,
+  highlight,
+  maxFitScale,
+  onPageElement,
+  onSelection,
+  pageNumber,
+  pageSizes,
+  pdfDoc,
+  pdfModule,
+  zoom,
+}: {
+  containerWidth: number;
+  highlight?: PdfBboxHighlight | null;
+  maxFitScale: number;
+  onPageElement: (element: HTMLElement | null) => void;
+  onSelection?: (quote: string, page: number) => void;
+  pageNumber: number;
+  pageSizes?: number[][];
+  pdfDoc: PdfDocument;
+  pdfModule: PdfModule;
+  zoom: string;
+}) {
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const textLayerRef = useRef<HTMLDivElement | null>(null);
+  const highlightRef = useRef<HTMLDivElement | null>(null);
+  const [renderedSize, setRenderedSize] = useState<{ width: number; height: number } | null>(null);
+  const [renderedScale, setRenderedScale] = useState(1);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onPageElement(pageRef.current);
+    return () => onPageElement(null);
+  }, [onPageElement]);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
     let cancelled = false;
 
     (async () => {
       try {
-        const pdfPage = await pdfDoc.getPage(safePage);
+        setError(null);
+        const pdfPage = await pdfDoc.getPage(pageNumber);
         if (cancelled) return;
         const naturalViewport = pdfPage.getViewport({ scale: 1 });
-        const fitScale =
-          containerWidth > 0
-            ? Math.min(scale, Math.max(0.72, (containerWidth - 2) / naturalViewport.width))
-            : scale;
+        const requestedScale =
+          zoom === "fit"
+            ? scaleForContainer(containerWidth, naturalViewport.width)
+            : Number(zoom) / 100;
+        const fitScale = zoom === "fit" ? Math.min(maxFitScale, requestedScale) : requestedScale;
         const viewport = pdfPage.getViewport({ scale: fitScale });
+        const outputScale = Math.max(1, window.devicePixelRatio || 1);
 
-        const canvas = canvasRef.current!;
-        const context = canvas.getContext("2d");
-        if (!context) return;
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
+        const canvas = canvasRef.current;
+        const context = canvas?.getContext("2d");
+        if (!canvas || !context) return;
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
         setRenderedSize({ width: viewport.width, height: viewport.height });
         setRenderedScale(fitScale);
 
-        await pdfPage.render({ canvasContext: context, viewport }).promise;
+        await pdfPage.render({
+          canvasContext: context,
+          viewport,
+          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+        }).promise;
 
-        // Render the text layer so the user can select.
         const textLayer = textLayerRef.current;
         if (textLayer) {
           textLayer.innerHTML = "";
           textLayer.style.width = `${viewport.width}px`;
           textLayer.style.height = `${viewport.height}px`;
           const textContent = await pdfPage.getTextContent();
-          // pdfjs-dist v4 exports renderTextLayer at runtime even though the
-          // type stub is missing — cast to any to keep TypeScript happy.
           const renderTextLayer = (pdfModule as unknown as {
             renderTextLayer?: (params: Record<string, unknown>) => unknown;
           }).renderTextLayer;
@@ -164,16 +317,14 @@ export function PdfViewer({
     return () => {
       cancelled = true;
     };
-  }, [pdfDoc, pdfModule, page, scale, numPages, containerWidth]);
+  }, [containerWidth, maxFitScale, pageNumber, pdfDoc, pdfModule, zoom]);
 
-  // Highlight rectangle (PDF points → canvas px).
   const highlightStyle = (() => {
-    if (!highlight || highlight.page !== page || !renderedSize) {
+    if (!highlight || highlight.page !== pageNumber || !renderedSize) {
       return null;
     }
     const [, , , pageHeight] = effectivePageBbox(highlight, pageSizes, renderedSize);
     const [x0, y0, x1, y1] = highlight.bbox;
-    // PDF.js viewport y is already top-down in canvas space so we use bbox directly.
     return {
       left: x0 * renderedScale,
       top: y0 * renderedScale,
@@ -183,58 +334,57 @@ export function PdfViewer({
     };
   })();
 
+  useEffect(() => {
+    if (!highlightStyle || !highlightRef.current) return;
+    window.requestAnimationFrame(() => {
+      highlightRef.current?.scrollIntoView({ block: "center", inline: "center" });
+    });
+  }, [highlightStyle]);
+
   function handleMouseUp() {
     if (!onSelection) return;
     const selection = window.getSelection();
     const value = selection?.toString().trim();
     if (value && value.length > 2) {
-      onSelection(value, page);
+      onSelection(value, pageNumber);
     }
   }
 
   return (
-    <div className="pdf-viewer" ref={containerRef}>
-      <div className="pdf-viewer-toolbar">
-        <button
-          type="button"
-          onClick={() => onPageChange?.(Math.max(1, page - 1))}
-          disabled={page <= 1}
-        >
-          ‹ Prev
-        </button>
-        <span className="pdf-viewer-page-indicator">
-          Page {page}
-          {numPages ? ` / ${numPages}` : ""}
-        </span>
-        <button
-          type="button"
-          onClick={() => onPageChange?.(Math.min(numPages || page + 1, page + 1))}
-          disabled={numPages > 0 && page >= numPages}
-        >
-          Next ›
-        </button>
+    <article className="pdf-viewer-page" data-page={pageNumber} ref={pageRef}>
+      <div className="pdf-viewer-page-label">Page {pageNumber}</div>
+      {error ? <p className="warning">{error}</p> : null}
+      <div className="pdf-viewer-canvas-wrap" onMouseUp={handleMouseUp}>
+        <canvas ref={canvasRef} className="pdf-viewer-canvas" />
+        <div ref={textLayerRef} className="pdf-viewer-text-layer" />
+        {highlightStyle ? (
+          <div
+            className="pdf-viewer-highlight"
+            ref={highlightRef}
+            style={highlightStyle}
+            aria-hidden
+          />
+        ) : null}
       </div>
-      {error ? (
-        <p className="warning">{error}</p>
-      ) : (
-        <div className="pdf-viewer-canvas-wrap" onMouseUp={handleMouseUp}>
-          <canvas ref={canvasRef} className="pdf-viewer-canvas" />
-          <div ref={textLayerRef} className="pdf-viewer-text-layer" />
-          {highlightStyle ? (
-            <div className="pdf-viewer-highlight" style={highlightStyle} aria-hidden />
-          ) : null}
-        </div>
-      )}
-    </div>
+    </article>
   );
 }
 
+function scaleForContainer(containerWidth: number, pageWidth: number): number {
+  if (containerWidth <= 0 || pageWidth <= 0) {
+    return 1.4;
+  }
+  return Math.max(0.72, (containerWidth - 2) / pageWidth);
+}
+
+function clampPage(value: number, maxPage: number): number {
+  return Math.max(1, Math.min(value, Math.max(1, maxPage)));
+}
+
 function effectivePageBbox(
-  highlight: PdfBboxHighlight,
+  _highlight: PdfBboxHighlight,
   _pageSizes: number[][] | undefined,
   renderedSize: { width: number; height: number },
 ): [number, number, number, number] {
-  // Currently unused but reserved for non-uniform-page support: returns the
-  // rendered page size so the highlight can be clipped to the visible canvas.
   return [0, 0, renderedSize.width, renderedSize.height];
 }

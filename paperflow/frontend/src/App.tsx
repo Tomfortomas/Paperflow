@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { createPaperflowClient, type PaperflowClient } from "./api";
 import { PdfViewer, type PdfBboxHighlight } from "./PdfViewer";
@@ -24,6 +31,11 @@ import "./styles.css";
 
 const defaultClient = createPaperflowClient();
 type Locale = "zh" | "en";
+
+const RAIL_WIDTH_STORAGE_KEY = "paperflow.workspaceRailWidth";
+const RAIL_WIDTH_DEFAULT = 320;
+const RAIL_WIDTH_MIN = 300;
+const RAIL_WIDTH_MAX = 560;
 
 const UI_TEXT = {
   zh: {
@@ -1042,6 +1054,8 @@ function Workspace({
   );
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [pdfPage, setPdfPage] = useState(1);
+  const [railWidth, setRailWidth] = useState(loadStoredRailWidth);
+  const railWidthRef = useRef(railWidth);
   const [r1Running, setR1Running] = useState(false);
   const [r1Error, setR1Error] = useState<string | null>(null);
   const [r1Trace, setR1Trace] = useState<R1QueryTraceEntry[]>([]);
@@ -1054,6 +1068,11 @@ function Workspace({
 
   const isReportReady = paper.status?.stage === "completed";
   const pdfUrl = useMemo(() => client.pdfUrl(paper.id), [client, paper.id]);
+  const railStyle = { "--col-rail": `${railWidth}px` } as CSSProperties;
+
+  useEffect(() => {
+    railWidthRef.current = railWidth;
+  }, [railWidth]);
 
   useEffect(() => {
     if (!selectedClaim && report?.summary[0]) {
@@ -1102,6 +1121,30 @@ function Workspace({
       setPdfPage(evidence.page);
     }
     setPdfViewerOpen(true);
+  }
+
+  function startRailResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = railWidthRef.current;
+    document.body.classList.add("is-resizing-rail");
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      const nextWidth = clampRailWidth(startWidth + startX - moveEvent.clientX);
+      railWidthRef.current = nextWidth;
+      setRailWidth(nextWidth);
+    };
+    const handleUp = () => {
+      document.body.classList.remove("is-resizing-rail");
+      saveRailWidth(railWidthRef.current);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
   }
 
   async function askAgentChat() {
@@ -1267,7 +1310,7 @@ function Workspace({
 
   if (!report) {
     return (
-      <main className="workspace">
+      <main className="workspace" style={railStyle}>
         <TopNav
           agentStatus={agentStatus}
           currentTitle={displayTitle}
@@ -1306,6 +1349,7 @@ function Workspace({
           onEvidenceOpen={openEvidenceInPdf}
           onQuestionChange={setQuestion}
           onRerun={onRerun}
+          onResizeStart={startRailResize}
           paper={paper}
           question={question}
           selectedClaim={selectedClaim}
@@ -1315,9 +1359,41 @@ function Workspace({
   }
 
   const related = relatedOverride ?? report.related_work;
+  const workspaceClass = pdfViewerOpen && isReportReady ? "workspace workspace-has-pdf" : "workspace";
+  const pdfWorkspacePane =
+    pdfViewerOpen && isReportReady ? (
+      <section className="workspace-pdf-pane" aria-label="PDF workspace">
+        <div className="workspace-pdf-head">
+          <div>
+            <p className="label-section">{text.pdfPanel}</p>
+            <p className="workspace-pdf-meta">
+              {highlight?.page
+                ? `${text.page(highlight.page)} · ${locale === "zh" ? "证据定位" : "evidence focus"}`
+                : paper.pdf_path}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn-link"
+            onClick={() => setPdfViewerOpen(false)}
+          >
+            {text.disableViewer}
+          </button>
+        </div>
+        <section className="pdf-viewer-shell">
+          <PdfViewer
+            pdfUrl={pdfUrl}
+            page={pdfPage}
+            highlight={highlight}
+            onPageChange={setPdfPage}
+            onSelection={(quote, page) => void askSelection(quote, page)}
+          />
+        </section>
+      </section>
+    ) : null;
 
   return (
-    <main className="workspace">
+    <main className={workspaceClass} style={railStyle}>
       <TopNav
         agentStatus={agentStatus}
         currentTitle={displayTitle}
@@ -1326,6 +1402,7 @@ function Workspace({
         onBack={onBack}
         onLocaleToggle={onLocaleToggle}
       />
+      {pdfWorkspacePane}
       <section className="workspace-main">
         {importNotice ? <p className="notice-line">{importNotice}</p> : null}
         <ImportActivityBanner activity={importActivity} locale={locale} />
@@ -1351,18 +1428,6 @@ function Workspace({
             ) : null}
           </div>
         </header>
-
-        {pdfViewerOpen && isReportReady ? (
-          <section className="pdf-viewer-shell">
-            <PdfViewer
-              pdfUrl={pdfUrl}
-              page={pdfPage}
-              highlight={highlight}
-              onPageChange={setPdfPage}
-              onSelection={(quote, page) => void askSelection(quote, page)}
-            />
-          </section>
-        ) : null}
 
         {report.summary.length > 0 ? (
           <section className="report-section">
@@ -1476,6 +1541,7 @@ function Workspace({
         onEvidenceOpen={openEvidenceInPdf}
         onQuestionChange={setQuestion}
         onRerun={onRerun}
+        onResizeStart={startRailResize}
         paper={paper}
         question={question}
         selectedClaim={selectedClaim}
@@ -1945,6 +2011,7 @@ function Rail({
   onEvidenceOpen,
   onQuestionChange,
   onRerun,
+  onResizeStart,
   paper,
   question,
   selectedClaim,
@@ -1963,6 +2030,7 @@ function Rail({
   onEvidenceOpen: (evidence: Evidence) => void;
   onQuestionChange: (question: string) => void;
   onRerun: () => void;
+  onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   paper: Paper;
   question: string;
   selectedClaim: Claim | null;
@@ -1970,6 +2038,12 @@ function Rail({
   const text = UI_TEXT[locale];
   return (
     <aside className="workspace-rail">
+      <button
+        type="button"
+        className="rail-resize-handle"
+        aria-label="Resize Agent rail"
+        onPointerDown={onResizeStart}
+      />
       <section className="rail-block">
         <div className="rail-block-head">
           <p className="label-section">{text.agentStatus}</p>
@@ -2876,6 +2950,40 @@ function importActivityMessage(activity: ImportActivity, locale: Locale) {
     case "failed":
       return `${title || "Paper"} failed. Check the error details.`;
   }
+}
+
+function loadStoredRailWidth() {
+  if (typeof window === "undefined" || typeof window.localStorage?.getItem !== "function") {
+    return RAIL_WIDTH_DEFAULT;
+  }
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(RAIL_WIDTH_STORAGE_KEY);
+  } catch {
+    return RAIL_WIDTH_DEFAULT;
+  }
+  const parsed = stored ? Number.parseInt(stored, 10) : RAIL_WIDTH_DEFAULT;
+  return clampRailWidth(Number.isFinite(parsed) ? parsed : RAIL_WIDTH_DEFAULT);
+}
+
+function saveRailWidth(width: number) {
+  if (typeof window.localStorage?.setItem !== "function") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(clampRailWidth(width)));
+  } catch {
+    // Persisting the rail width is nice-to-have; resizing should still work.
+  }
+}
+
+function clampRailWidth(width: number) {
+  if (typeof window === "undefined") {
+    return Math.min(RAIL_WIDTH_MAX, Math.max(RAIL_WIDTH_MIN, width));
+  }
+  const viewportBound = Math.floor(window.innerWidth * 0.42);
+  const maxWidth = Math.max(RAIL_WIDTH_MIN, Math.min(RAIL_WIDTH_MAX, viewportBound));
+  return Math.min(maxWidth, Math.max(RAIL_WIDTH_MIN, width));
 }
 
 function sleep(ms: number) {

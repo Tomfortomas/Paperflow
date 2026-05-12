@@ -358,7 +358,18 @@ describe("Paperflow app", () => {
     await user.click(screen.getAllByRole("button", { name: /查看 1 条证据/i })[0]);
     await user.click(screen.getByRole("button", { name: /在 PDF 中查看/i }));
 
-    expect(screen.getByText(/PDF 阅读/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/PDF workspace/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^PDF page$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^PDF zoom$/i)).toBeInTheDocument();
+  });
+
+  it("offers a bounded resize handle for the Agent rail", async () => {
+    const user = userEvent.setup();
+    render(<App initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+
+    expect(screen.getByLabelText(/Resize Agent rail/i)).toBeInTheDocument();
   });
 
   it("renders a Field Map lineage graph", async () => {

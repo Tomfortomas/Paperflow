@@ -40,6 +40,7 @@ The product stance is simple: **report first, chat second, evidence always**.
 
 ## News
 
+- **2026-05-12 — v0.5 completed.** The Workspace now supports a high-resolution continuous PDF pane, page jump, zoom controls, evidence-centered scrolling, and a large-screen three-column reading layout.
 - **2026-05-12 — v0.4 completed.** Agent chat transcripts are persisted, SSE chat streaming is available, evidence clicks can open the PDF viewer, and Field Map edges now include Agent enrichment metadata.
 - **2026-05-12 — v0.3 released.** The Workspace gained a formal right-rail Agent conversation panel with transcript, process cards, status, composer, and paper-scoped chat API.
 - **2026-05-12 — v0.2 completed.** Evidence workflow, metadata import, R1 search, Field Map, compare, R2 insights, and task queue support landed.
@@ -408,3 +409,10 @@ Paperflow currently ships two front-ends on top of the same backend agent harnes
 - [x] Add SSE streaming for Agent chat step/final events, with frontend stream consumption and final transcript sync.
 - [x] Deepen PDF evidence interactions: evidence detail can open the PDF viewer, jump to the evidence page, and reuse bbox highlights when available.
 - [x] Add Agent-enriched Field Map / lineage graph edges with source type, rationale, confidence, and UI labels that distinguish Agent suggestions from rule-derived relations.
+
+### v0.5
+
+- [x] Render PDF pages at device-pixel-ratio resolution so text stays sharp on Retina and large displays.
+- [x] Add continuous PDF scrolling with toolbar controls for direct page jump and zoom presets (`Fit`, `100%`, `125%`, `150%`).
+- [x] Move the PDF into an independent Workspace pane that becomes a left column on large screens.
+- [x] Keep evidence-driven PDF opening: clicking evidence opens the PDF pane, jumps to the page, and scrolls the highlight into view when bbox data exists.
