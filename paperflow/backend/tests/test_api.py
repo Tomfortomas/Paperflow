@@ -2,9 +2,11 @@ from pathlib import Path
 from threading import Event
 import time
 
+import httpx
 from fastapi.testclient import TestClient
 
 from app.main import create_app, extract_arxiv_id
+from app.deepseek import set_report_read_timeout_seconds
 from app.metadata import MetadataError
 from app.models import ImportSourceType, PaperMetadata, ReadingReport
 from app.report_service import ReportService
@@ -260,6 +262,41 @@ def test_import_returns_before_agent_completes_and_status_can_be_polled(tmp_path
     assert wait_for_status(client, paper_id, "completed")["progress"] == 1.0
 
 
+def test_processing_status_uses_non_misleading_initial_progress(tmp_path: Path) -> None:
+    blocking_service = BlockingReportService()
+    app = create_app(tmp_path / "data", report_service=blocking_service)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("slow.pdf", b"Abstract: slow", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+
+    assert blocking_service.started.wait(timeout=2)
+    status = client.get(f"/api/papers/{paper_id}/status").json()
+
+    assert status["stage"] == "processing"
+    assert status["progress"] < 0.35
+    assert "preparing" in status["message"].lower()
+    blocking_service.release.set()
+
+
+def test_deepseek_read_timeout_surfaces_actionable_failed_status(tmp_path: Path) -> None:
+    app = create_app(tmp_path / "data", report_service=TimeoutReportService())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("timeout.pdf", b"Abstract: timeout", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+
+    status = wait_for_status(client, paper_id, "failed")
+
+    assert "DeepSeek report generation timed out" in status["message"]
+
+
 def test_agent_status_endpoint_reports_configured_state(tmp_path: Path) -> None:
     app = create_app(tmp_path / "data", report_service=ReportService(agent=FakePaperAgent()))
     client = TestClient(app)
@@ -268,6 +305,32 @@ def test_agent_status_endpoint_reports_configured_state(tmp_path: Path) -> None:
 
     assert status["configured"] is True
     assert status["mode"] == "injected"
+
+
+def test_agent_config_endpoint_updates_model_and_timeout(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    monkeypatch.setenv("DEEPSEEK_REPORT_READ_TIMEOUT", "45")
+    try:
+        app = create_app(tmp_path / "data")
+        client = TestClient(app)
+
+        initial = client.get("/api/agent/config").json()
+        assert initial["model"] == "deepseek-v4-flash"
+        assert initial["report_read_timeout"] == 45
+
+        updated = client.put(
+            "/api/agent/config",
+            json={"model": "deepseek-v4-pro", "report_read_timeout": 120},
+        )
+
+        assert updated.status_code == 200
+        payload = updated.json()
+        assert payload["model"] == "deepseek-v4-pro"
+        assert payload["report_read_timeout"] == 120
+        assert client.get("/api/agent/status").json()["model"] == "deepseek-v4-pro"
+    finally:
+        set_report_read_timeout_seconds(None)
 
 
 def test_missing_agent_configuration_surfaces_failed_status(tmp_path: Path, monkeypatch) -> None:
@@ -424,3 +487,8 @@ class BlockingReportService:
         self.started.set()
         self.release.wait(timeout=5)
         return self.inner.generate_report(session)
+
+
+class TimeoutReportService:
+    def generate_report(self, session) -> ReadingReport:
+        raise httpx.ReadTimeout("The read operation timed out")

@@ -185,6 +185,16 @@ export interface AgentStatus {
   model?: string | null;
 }
 
+export interface AgentConfig extends AgentStatus {
+  model_options: string[];
+  report_read_timeout: number;
+}
+
+export interface AgentConfigUpdate {
+  model?: string | null;
+  report_read_timeout?: number | null;
+}
+
 // Phase 4 — Field Map.
 
 export type MilestoneCategory =

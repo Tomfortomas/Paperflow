@@ -13,7 +13,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.compare import compare_papers
-from app.deepseek import DeepSeekClient
+from app.deepseek import (
+    DEEPSEEK_MODEL_OPTIONS,
+    DeepSeekClient,
+    report_read_timeout_seconds,
+    set_report_read_timeout_seconds,
+)
 from app.evidence_verifier import EvidenceVerifier
 from app.field_map import build_field_map
 from app.metadata import (
@@ -78,6 +83,18 @@ class ExportResponse(BaseModel):
     note_path: str
 
 
+class AgentConfigRequest(BaseModel):
+    model: Optional[str] = None
+    report_read_timeout: Optional[float] = None
+
+
+REPORT_PREPARING_MESSAGE = "PaperAgent is preparing PDF text and report context"
+REPORT_TIMEOUT_MESSAGE = (
+    "DeepSeek report generation timed out. The PDF may be long or the model may be slow; "
+    "retry later or increase DEEPSEEK_REPORT_READ_TIMEOUT."
+)
+
+
 def _mark_interrupted_report_runs(storage: PaperStorage) -> None:
     for paper in storage.list_papers():
         if paper.status.stage not in {"queued", "processing"}:
@@ -93,6 +110,30 @@ def _mark_interrupted_report_runs(storage: PaperStorage) -> None:
                     progress=1.0,
                 ),
             )
+
+
+def _agent_deepseek_client(report_service: ReportService) -> Optional[DeepSeekClient]:
+    agent = getattr(report_service, "agent", None)
+    client = getattr(agent, "client", None)
+    return client if isinstance(client, DeepSeekClient) else None
+
+
+def _agent_config_payload(
+    *,
+    injected_report_service: bool,
+    report_service: ReportService,
+) -> dict:
+    runtime_client = _agent_deepseek_client(report_service)
+    env_client = DeepSeekClient.from_env()
+    client = runtime_client or env_client
+    mode = "injected" if injected_report_service else ("deepseek" if client else "missing-key")
+    return {
+        "configured": injected_report_service or client is not None,
+        "mode": mode,
+        "model": client.model if client else None,
+        "model_options": DEEPSEEK_MODEL_OPTIONS,
+        "report_read_timeout": report_read_timeout_seconds(),
+    }
 
 
 def _answer_chat_from_report(
@@ -214,10 +255,16 @@ def create_app(
     def run_report_task(session: PaperSession) -> None:
         storage.update_status(
             session.paper.id,
-            TaskStatus(stage="processing", message="DeepSeek PaperAgent is parsing the PDF", progress=0.35),
+            TaskStatus(stage="processing", message=REPORT_PREPARING_MESSAGE, progress=0.15),
         )
         try:
             report = report_service.generate_report(session)
+        except httpx.ReadTimeout:
+            storage.update_status(
+                session.paper.id,
+                TaskStatus(stage="failed", message=REPORT_TIMEOUT_MESSAGE, progress=1.0),
+            )
+            return
         except Exception as exc:
             storage.update_status(
                 session.paper.id,
@@ -435,12 +482,45 @@ def create_app(
 
     @app.get("/api/agent/status")
     def agent_status():
-        client = DeepSeekClient.from_env()
+        config = _agent_config_payload(
+            injected_report_service=injected_report_service,
+            report_service=report_service,
+        )
         return {
-            "configured": injected_report_service or client is not None,
-            "mode": "injected" if injected_report_service else ("deepseek" if client else "missing-key"),
-            "model": client.model if client else None,
+            "configured": config["configured"],
+            "mode": config["mode"],
+            "model": config["model"],
         }
+
+    @app.get("/api/agent/config")
+    def get_agent_config():
+        return _agent_config_payload(
+            injected_report_service=injected_report_service,
+            report_service=report_service,
+        )
+
+    @app.put("/api/agent/config")
+    def update_agent_config(request: AgentConfigRequest):
+        if request.report_read_timeout is not None:
+            if request.report_read_timeout < 10 or request.report_read_timeout > 600:
+                raise HTTPException(
+                    status_code=400,
+                    detail="report_read_timeout must be between 10 and 600 seconds",
+                )
+            set_report_read_timeout_seconds(request.report_read_timeout)
+
+        if request.model is not None:
+            model = request.model.strip()
+            if not model:
+                raise HTTPException(status_code=400, detail="model cannot be empty")
+            runtime_client = _agent_deepseek_client(report_service)
+            if runtime_client is not None:
+                runtime_client.model = model
+
+        return _agent_config_payload(
+            injected_report_service=injected_report_service,
+            report_service=report_service,
+        )
 
     @app.post("/api/papers/{paper_id}/ask")
     def ask_paper(paper_id: str, request: AskRequest):

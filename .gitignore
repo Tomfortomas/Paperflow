@@ -81,10 +81,4 @@ DeepSeek-TUI/
 # ============================================================================
 # Internal design docs (kept locally, not part of the open-source repo)
 # ============================================================================
-Paperflow_V1_PRD.md
-Paperflow_V1_1_PRD.md
-Paperflow_V2_PRD.md
-Paperflow_V1_IMPLEMENTATION_PLAN.md
-SMLThoughts.md
-SMLThoughts_V1_status.md
-SMLThoughts_with_suggestions.md
+design_docs/

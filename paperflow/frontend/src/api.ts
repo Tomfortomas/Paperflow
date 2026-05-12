@@ -1,4 +1,6 @@
 import type {
+  AgentConfig,
+  AgentConfigUpdate,
   AgentStatus,
   AgentTask,
   Claim,
@@ -55,6 +57,8 @@ export interface PaperflowClient {
   exportObsidian(paperId: string): Promise<{ note_path: string }>;
   rerunAgent(paperId: string): Promise<PaperSession>;
   getAgentStatus(): Promise<AgentStatus>;
+  getAgentConfig(): Promise<AgentConfig>;
+  updateAgentConfig(payload: AgentConfigUpdate): Promise<AgentConfig>;
 }
 
 const defaultBaseUrl =
@@ -206,6 +210,16 @@ export function createPaperflowClient(baseUrl = defaultBaseUrl): PaperflowClient
     },
     async getAgentStatus() {
       return request<AgentStatus>(`${baseUrl}/api/agent/status`);
+    },
+    async getAgentConfig() {
+      return request<AgentConfig>(`${baseUrl}/api/agent/config`);
+    },
+    async updateAgentConfig(payload: AgentConfigUpdate) {
+      return request<AgentConfig>(`${baseUrl}/api/agent/config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
     },
   };
 }

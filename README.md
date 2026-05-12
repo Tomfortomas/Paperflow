@@ -105,7 +105,7 @@ The agent harness — PaperAgent + ReportService + DeepSeekClient — lives only
 
 ## Quickstart
 
-> Requirements: Python 3.9+, Node.js 18+, and (optionally) a DeepSeek API key for full Agent capability.
+> Requirements: Python 3.9+, Node.js 18+, and a DeepSeek API key for real Agent parsing.
 
 ### 1. Clone
 
@@ -114,7 +114,64 @@ git clone https://github.com/shiml20/PaperFlow.git
 cd PaperFlow
 ```
 
-### 2. Backend
+### 2. Fastest API Setup (DeepSeek)
+
+PaperFlow currently supports DeepSeek as the Agent API provider. The fastest path
+for a new user is to export one environment variable before starting the app:
+
+```bash
+export DEEPSEEK_API_KEY="your-deepseek-api-key"
+cd paperflow
+./run-dev.sh --install
+```
+
+Then open `http://127.0.0.1:5173`, import a PDF or arXiv URL, and wait for the
+Reading Report to finish.
+
+If dependencies are already installed, use:
+
+```bash
+export DEEPSEEK_API_KEY="your-deepseek-api-key"
+cd paperflow
+./run-dev.sh
+```
+
+### 3. DeepSeek Configuration
+
+The backend reads DeepSeek credentials from the environment first, then falls
+back to a config file:
+
+1. `DEEPSEEK_API_KEY` environment variable.
+2. `api_key` in the config file.
+
+The config file path is `DEEPSEEK_CONFIG_PATH` when set, otherwise
+`~/.deepseek/config.toml`.
+
+Supported environment variables:
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `DEEPSEEK_API_KEY` | Yes | none | DeepSeek API key used by the backend PaperAgent. |
+| `DEEPSEEK_BASE_URL` | No | `https://api.deepseek.com/beta` | DeepSeek-compatible chat completions endpoint root. |
+| `DEEPSEEK_MODEL` | No | `deepseek-v4-flash` | Model used for Reading Report generation. |
+| `DEEPSEEK_REPORT_READ_TIMEOUT` | No | `45` | Read timeout in seconds for report generation. Increase this for long PDFs or slow model responses. |
+| `DEEPSEEK_CONFIG_PATH` | No | `~/.deepseek/config.toml` | Alternate config file path. |
+
+Example config file:
+
+```toml
+api_key = "your-deepseek-api-key"
+base_url = "https://api.deepseek.com/beta"
+model = "deepseek-v4-flash"
+```
+
+`default_text_model` is also accepted as a fallback model key for compatibility
+with existing DeepSeek config files.
+
+Without a DeepSeek key, the backend reports `Agent not configured` and cannot
+produce a real R0/R1 Reading Report.
+
+### 4. Backend
 
 ```bash
 cd paperflow/backend
@@ -122,20 +179,14 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 
-# Optional: enable the real DeepSeek-backed PaperAgent
+# Enable the real DeepSeek-backed PaperAgent
 export DEEPSEEK_API_KEY="your-key"
 export DEEPSEEK_MODEL="deepseek-v4-flash"
+# Optional for long PDFs or slow model responses
+export DEEPSEEK_REPORT_READ_TIMEOUT="90"
 
 uvicorn app.main:app --reload
 ```
-
-PaperFlow also reuses keys stored at `~/.deepseek/config.toml`
-(or whatever path `DEEPSEEK_CONFIG_PATH` points to), so a key saved by
-`deepseek auth set --provider deepseek` is picked up automatically.
-
-Without a DeepSeek key the backend uses a clearly-marked development fallback.
-That fallback is **only** for local UI smoke-testing — real R0/R1 extraction always
-goes through the DeepSeek-backed PaperAgent.
 
 Run the backend tests:
 
@@ -145,7 +196,7 @@ cd paperflow/backend
 pytest -q
 ```
 
-### 3. Web Frontend
+### 5. Web Frontend
 
 ```bash
 cd paperflow/frontend
@@ -169,7 +220,7 @@ Open `http://localhost:5173` in your browser, then:
 5. Ask a focused question — the answer is still graded R0 / R1 / R2.
 6. Click **Save Obsidian Note** to drop a Markdown file into the local vault.
 
-### 4. TUI (Terminal UI)
+### 6. TUI (Terminal UI)
 
 If you prefer a keyboard-driven workflow, PaperFlow ships a Textual-based TUI
 that talks to the same backend.

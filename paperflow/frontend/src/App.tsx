@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createPaperflowClient, type PaperflowClient } from "./api";
 import { PdfViewer, type PdfBboxHighlight } from "./PdfViewer";
 import type {
+  AgentConfig,
+  AgentConfigUpdate,
   AgentStatus,
   Claim,
   Evidence,
@@ -36,6 +38,13 @@ const UI_TEXT = {
     heroDescription:
       "导入论文，生成带证据的阅读报告，并保存为 Obsidian 原生笔记。",
     agentLabel: "Agent",
+    agentConfig: "Agent 配置",
+    agentConfigSaved: "Agent 配置已保存。",
+    agentConfigFailed: "Agent 配置保存失败。",
+    agentModel: "DeepSeek 模型",
+    agentTimeout: "报告超时（秒）",
+    saveAgentConfig: "保存 Agent 配置",
+    agentConfigHint: "新配置会在下一次导入或重新运行 Agent 时生效。",
     configured: "已配置",
     missingKey: "缺少 key",
     languageToggle: "English",
@@ -158,8 +167,12 @@ const UI_TEXT = {
       "Import failed.": "导入失败。",
       "Reading report generated": "阅读报告已生成",
       "Queued for Agent parsing": "已加入 Agent 解析队列",
+      "PaperAgent is preparing PDF text and report context":
+        "正在准备 PDF 文本和 Agent 上下文。",
       "DeepSeek PaperAgent is parsing the PDF":
         "DeepSeek PaperAgent 正在解析 PDF",
+      "DeepSeek report generation timed out. The PDF may be long or the model may be slow; retry later or increase DEEPSEEK_REPORT_READ_TIMEOUT.":
+        "DeepSeek 生成阅读报告超时。PDF 可能较长或模型响应较慢，可以稍后重试；长论文可调高 DEEPSEEK_REPORT_READ_TIMEOUT。",
       "Queued for Agent rerun": "已加入 Agent 重跑队列",
     },
     sectionTitles: {
@@ -186,6 +199,13 @@ const UI_TEXT = {
     heroDescription:
       "Bring in papers, generate evidence-aware reading reports, and save Obsidian-native notes for long-term research.",
     agentLabel: "Agent",
+    agentConfig: "Agent Config",
+    agentConfigSaved: "Agent config saved.",
+    agentConfigFailed: "Agent config save failed.",
+    agentModel: "DeepSeek Model",
+    agentTimeout: "Report Timeout (seconds)",
+    saveAgentConfig: "Save Agent Config",
+    agentConfigHint: "New settings apply to the next import or Agent rerun.",
     configured: "configured",
     missingKey: "missing key",
     languageToggle: "中文",
@@ -342,6 +362,9 @@ export function App({
   const [status, setStatus] = useState(UI_TEXT.en.readyStatus);
   const [error, setError] = useState<string | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
+  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
+  const [agentConfigDraft, setAgentConfigDraft] = useState<AgentConfigUpdate>({});
+  const [agentConfigMessage, setAgentConfigMessage] = useState<string | null>(null);
   const [arxivInput, setArxivInput] = useState("");
   const [urlInput, setUrlInput] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -364,14 +387,47 @@ export function App({
 
   async function refreshLibrary() {
     try {
-      const [library, agent] = await Promise.all([
+      const [library, agent, config] = await Promise.all([
         client.listPapers(),
         client.getAgentStatus(),
+        client.getAgentConfig(),
       ]);
       setPapers(library);
       setAgentStatus(agent);
+      setAgentConfig(config);
+      setAgentConfigDraft({
+        model: config.model ?? "",
+        report_read_timeout: config.report_read_timeout,
+      });
     } catch {
       setStatus(UI_TEXT.en.backendMissing);
+    }
+  }
+
+  async function saveAgentConfig() {
+    if (!agentConfig) {
+      return;
+    }
+    const model = String(agentConfigDraft.model ?? "").trim();
+    const timeout = Number(agentConfigDraft.report_read_timeout);
+    try {
+      const updated = await client.updateAgentConfig({
+        model,
+        report_read_timeout: Number.isFinite(timeout) ? timeout : agentConfig.report_read_timeout,
+      });
+      setAgentConfig(updated);
+      setAgentStatus({
+        configured: updated.configured,
+        mode: updated.mode,
+        model: updated.model,
+      });
+      setAgentConfigDraft({
+        model: updated.model ?? "",
+        report_read_timeout: updated.report_read_timeout,
+      });
+      setAgentConfigMessage(text.agentConfigSaved);
+    } catch {
+      setAgentConfigMessage(text.agentConfigFailed);
     }
   }
 
@@ -394,6 +450,11 @@ export function App({
     void pollPaper(session.paper.id);
   }
 
+  function showImportFailure(title: string | undefined, message: string) {
+    setError(null);
+    setImportActivity({ stage: "failed", title, message });
+  }
+
   async function handleImport(file: File) {
     setError(null);
     setStatus(UI_TEXT.en.queuedStatus);
@@ -402,9 +463,9 @@ export function App({
       const session = await client.importPaper(file);
       acceptImportedSession(session);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : text.importFailed);
+      const message = caught instanceof Error ? caught.message : text.importFailed;
       setStatus(UI_TEXT.en.importFailed);
-      setImportActivity({ stage: "failed", title: file.name });
+      showImportFailure(file.name, message);
     }
   }
 
@@ -422,9 +483,9 @@ export function App({
       acceptImportedSession(session);
       setArxivInput("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : text.importFailed);
+      const message = caught instanceof Error ? caught.message : text.importFailed;
       setStatus(UI_TEXT.en.importFailed);
-      setImportActivity({ stage: "failed", title: value });
+      showImportFailure(value, message);
     }
   }
 
@@ -442,9 +503,9 @@ export function App({
       acceptImportedSession(session);
       setUrlInput("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : text.importFailed);
+      const message = caught instanceof Error ? caught.message : text.importFailed;
       setStatus(UI_TEXT.en.importFailed);
-      setImportActivity({ stage: "failed", title: value });
+      showImportFailure(value, message);
     }
   }
 
@@ -471,8 +532,8 @@ export function App({
         void pollPaper(session.paper.id);
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : text.importFailed);
-      setImportActivity({ stage: "failed", title: "Zotero" });
+      const message = caught instanceof Error ? caught.message : text.importFailed;
+      showImportFailure("Zotero", message);
     }
   }
 
@@ -546,17 +607,19 @@ export function App({
         return;
       }
       if (nextStatus.stage === "failed") {
-        setError(nextStatus.message);
-        setImportActivity({
-          stage: "failed",
-          title: papers.find((paper) => paper.id === paperId)?.title,
-          message: nextStatus.message,
-        });
+        showImportFailure(
+          papers.find((paper) => paper.id === paperId)?.title,
+          nextStatus.message,
+        );
         return;
       }
       await sleep(1500);
     }
-    setError(text.parseTimeout);
+    setStatus(UI_TEXT.en.parseTimeout);
+    showImportFailure(
+      papers.find((paper) => paper.id === paperId)?.title,
+      text.parseTimeout,
+    );
   }
 
   function updatePaperStatus(paperId: string, nextStatus: TaskStatus) {
@@ -609,9 +672,14 @@ export function App({
         client={client}
         onBack={() => setSelectedPaper(null)}
         locale={locale}
+        agentConfig={agentConfig}
+        agentConfigDraft={agentConfigDraft}
+        agentConfigMessage={agentConfigMessage}
         agentStatus={agentStatus}
         importActivity={importActivity}
         importNotice={importNotice}
+        onAgentConfigChange={setAgentConfigDraft}
+        onAgentConfigSave={() => void saveAgentConfig()}
         onLocaleToggle={() => setLocale(locale === "zh" ? "en" : "zh")}
         onNoteSaved={(notePath) => updatePaperNote(selectedPaper.id, notePath)}
         onRerun={() => void rerunPaper(selectedPaper.id)}
@@ -715,6 +783,15 @@ export function App({
           </div>
         </div>
       </section>
+
+      <AgentConfigPanel
+        config={agentConfig}
+        draft={agentConfigDraft}
+        locale={locale}
+        message={agentConfigMessage}
+        onChange={setAgentConfigDraft}
+        onSave={() => void saveAgentConfig()}
+      />
 
       {error ? <p className="warning-line">{error}</p> : null}
       {importNotice ? <p className="notice-line">{importNotice}</p> : null}
@@ -874,9 +951,14 @@ function Workspace({
   report,
   client,
   locale,
+  agentConfig,
+  agentConfigDraft,
+  agentConfigMessage,
   agentStatus,
   importActivity,
   importNotice,
+  onAgentConfigChange,
+  onAgentConfigSave,
   onLocaleToggle,
   onNoteSaved,
   onRerun,
@@ -886,9 +968,14 @@ function Workspace({
   report?: ReadingReport;
   client: PaperflowClient;
   locale: Locale;
+  agentConfig: AgentConfig | null;
+  agentConfigDraft: AgentConfigUpdate;
+  agentConfigMessage: string | null;
   agentStatus: AgentStatus | null;
   importActivity: ImportActivity | null;
   importNotice?: string | null;
+  onAgentConfigChange: (draft: AgentConfigUpdate) => void;
+  onAgentConfigSave: () => void;
   onLocaleToggle: () => void;
   onNoteSaved: (notePath: string) => void;
   onRerun: () => void;
@@ -1089,10 +1176,15 @@ function Workspace({
           </div>
         </section>
         <Rail
+          agentConfig={agentConfig}
+          agentConfigDraft={agentConfigDraft}
+          agentConfigMessage={agentConfigMessage}
           chat={chat}
           chatStatus={chatStatus}
           locale={locale}
           notePath={notePath}
+          onAgentConfigChange={onAgentConfigChange}
+          onAgentConfigSave={onAgentConfigSave}
           onAsk={askAgentChat}
           onExport={exportNote}
           onQuestionChange={setQuestion}
@@ -1249,10 +1341,15 @@ function Workspace({
       </section>
 
       <Rail
+        agentConfig={agentConfig}
+        agentConfigDraft={agentConfigDraft}
+        agentConfigMessage={agentConfigMessage}
         chat={chat}
         chatStatus={chatStatus}
         locale={locale}
         notePath={notePath}
+        onAgentConfigChange={onAgentConfigChange}
+        onAgentConfigSave={onAgentConfigSave}
         onAsk={askAgentChat}
         onExport={exportNote}
         onQuestionChange={setQuestion}
@@ -1293,6 +1390,79 @@ function ImportActivityBanner({
   );
 }
 
+function AgentConfigPanel({
+  config,
+  draft,
+  locale,
+  message,
+  onChange,
+  onSave,
+}: {
+  config: AgentConfig | null;
+  draft: AgentConfigUpdate;
+  locale: Locale;
+  message: string | null;
+  onChange: (draft: AgentConfigUpdate) => void;
+  onSave: () => void;
+}) {
+  const text = UI_TEXT[locale];
+  if (!config) {
+    return null;
+  }
+  const modelOptions = Array.isArray(config.model_options) ? config.model_options : [];
+  const modelValue = String(draft.model ?? config.model ?? "");
+  const timeoutValue = String(draft.report_read_timeout ?? config.report_read_timeout ?? 45);
+  const listId = `agent-model-options-${locale}`;
+  return (
+    <section className="agent-config-panel">
+      <div className="agent-config-head">
+        <div>
+          <h2 className="label-section">{text.agentConfig}</h2>
+          <p>{text.agentConfigHint}</p>
+        </div>
+        <span className={`agent-chip ${config.configured ? "ready" : "missing"}`}>
+          {config.mode}
+        </span>
+      </div>
+      <div className="agent-config-grid">
+        <label>
+          <span>{text.agentModel}</span>
+          <input
+            aria-label={text.agentModel}
+            list={listId}
+            value={modelValue}
+            onChange={(event) => onChange({ ...draft, model: event.target.value })}
+          />
+          <datalist id={listId}>
+            {Array.from(new Set([modelValue, ...modelOptions].filter(Boolean))).map(
+              (model) => (
+                <option key={model} value={model} />
+              ),
+            )}
+          </datalist>
+        </label>
+        <label>
+          <span>{text.agentTimeout}</span>
+          <input
+            aria-label={text.agentTimeout}
+            min={10}
+            max={600}
+            type="number"
+            value={timeoutValue}
+            onChange={(event) =>
+              onChange({ ...draft, report_read_timeout: Number(event.target.value) })
+            }
+          />
+        </label>
+        <button type="button" className="btn-ghost" onClick={onSave}>
+          {text.saveAgentConfig}
+        </button>
+      </div>
+      {message ? <p className="agent-config-message">{message}</p> : null}
+    </section>
+  );
+}
+
 function PaperProcessingLine({
   paper,
   locale,
@@ -1303,14 +1473,20 @@ function PaperProcessingLine({
   if (!paper.status || paper.status.stage === "completed") {
     return null;
   }
-  const progress = Math.max(0, Math.min(100, Math.round((paper.status.progress ?? 0) * 100)));
+  const text = UI_TEXT[locale];
+  const statusLabels = text.statusLabels as Record<string, string>;
+  const stage = paper.status.stage ?? "unknown";
+  const stageLabel = statusLabels[stage] ?? statusLabels.unknown;
+  const isActive = stage === "queued" || stage === "processing";
   return (
     <div className="paper-processing-line">
       <span>{localizeTaskMessage(paper.status.message, locale)}</span>
-      <span className="mono">{progress}%</span>
-      <span className="paper-progress-track" aria-hidden="true">
-        <span style={{ width: `${progress}%` }} />
-      </span>
+      <span className="paper-processing-stage">{stageLabel}</span>
+      {isActive ? (
+        <span className="paper-progress-track is-active" aria-hidden="true">
+          <span />
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -1394,10 +1570,15 @@ function RelatedItem({
 }
 
 function Rail({
+  agentConfig,
+  agentConfigDraft,
+  agentConfigMessage,
   chat,
   chatStatus,
   locale,
   notePath,
+  onAgentConfigChange,
+  onAgentConfigSave,
   onAsk,
   onExport,
   onQuestionChange,
@@ -1406,10 +1587,15 @@ function Rail({
   question,
   selectedClaim,
 }: {
+  agentConfig: AgentConfig | null;
+  agentConfigDraft: AgentConfigUpdate;
+  agentConfigMessage: string | null;
   chat: PaperChatResponse | null;
   chatStatus: ChatPanelStatus;
   locale: Locale;
   notePath: string | null;
+  onAgentConfigChange: (draft: AgentConfigUpdate) => void;
+  onAgentConfigSave: () => void;
   onAsk: () => Promise<void>;
   onExport: () => Promise<void>;
   onQuestionChange: (question: string) => void;
@@ -1433,6 +1619,15 @@ function Rail({
           {text.rerunAgent}
         </button>
       </section>
+
+      <AgentConfigPanel
+        config={agentConfig}
+        draft={agentConfigDraft}
+        locale={locale}
+        message={agentConfigMessage}
+        onChange={onAgentConfigChange}
+        onSave={onAgentConfigSave}
+      />
 
       <section className="rail-block">
         <p className="label-section">{text.evidenceDetail}</p>

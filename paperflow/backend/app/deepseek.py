@@ -13,6 +13,13 @@ from app.models import ReadingReport
 
 REPORT_TEXT_BUDGET = 12000
 REPORT_READ_TIMEOUT_SECONDS = 45.0
+DEEPSEEK_MODEL_OPTIONS = [
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "deepseek-chat",
+    "deepseek-reasoner",
+]
+_report_read_timeout_override: Optional[float] = None
 
 
 class DeepSeekClient:
@@ -160,7 +167,18 @@ def _load_deepseek_config() -> dict:
 def _report_timeout() -> httpx.Timeout:
     return httpx.Timeout(
         connect=10.0,
-        read=float(os.getenv("DEEPSEEK_REPORT_READ_TIMEOUT", REPORT_READ_TIMEOUT_SECONDS)),
+        read=report_read_timeout_seconds(),
         write=10.0,
         pool=10.0,
     )
+
+
+def report_read_timeout_seconds() -> float:
+    if _report_read_timeout_override is not None:
+        return _report_read_timeout_override
+    return float(os.getenv("DEEPSEEK_REPORT_READ_TIMEOUT", REPORT_READ_TIMEOUT_SECONDS))
+
+
+def set_report_read_timeout_seconds(seconds: Optional[float]) -> None:
+    global _report_read_timeout_override
+    _report_read_timeout_override = seconds
