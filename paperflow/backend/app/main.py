@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import re
+import os
 import tempfile
+import time
 from pathlib import Path
 from threading import Thread
 from typing import Dict, List, Optional
@@ -12,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.agent import DeepSeekPaperAgent
 from app.compare import compare_papers
 from app.deepseek import (
     DEEPSEEK_MODEL_OPTIONS,
@@ -32,6 +35,7 @@ from app.models import (
     Claim,
     Evidence,
     EvidenceLocationStatus,
+    AgentRunMetrics,
     FieldMap,
     ImportSourceType,
     PaperMetadata,
@@ -84,6 +88,7 @@ class ExportResponse(BaseModel):
 
 
 class AgentConfigRequest(BaseModel):
+    api_key: Optional[str] = None
     model: Optional[str] = None
     report_read_timeout: Optional[float] = None
 
@@ -129,6 +134,7 @@ def _agent_config_payload(
     mode = "injected" if injected_report_service else ("deepseek" if client else "missing-key")
     return {
         "configured": injected_report_service or client is not None,
+        "has_api_key": client is not None,
         "mode": mode,
         "model": client.model if client else None,
         "model_options": DEEPSEEK_MODEL_OPTIONS,
@@ -257,6 +263,7 @@ def create_app(
             session.paper.id,
             TaskStatus(stage="processing", message=REPORT_PREPARING_MESSAGE, progress=0.15),
         )
+        started_at = time.perf_counter()
         try:
             report = report_service.generate_report(session)
         except httpx.ReadTimeout:
@@ -271,6 +278,11 @@ def create_app(
                 TaskStatus(stage="failed", message=str(exc), progress=1.0),
             )
             return
+
+        elapsed_seconds = round(time.perf_counter() - started_at, 2)
+        if report.agent_run is None:
+            report.agent_run = AgentRunMetrics()
+        report.agent_run.elapsed_seconds = elapsed_seconds
 
         # Persist parsed chunks alongside the report so the viewer (and any
         # later rerun) can highlight evidence without re-parsing the PDF.
@@ -501,6 +513,21 @@ def create_app(
 
     @app.put("/api/agent/config")
     def update_agent_config(request: AgentConfigRequest):
+        runtime_client = _agent_deepseek_client(report_service)
+        model = request.model.strip() if request.model is not None else None
+
+        if request.api_key is not None:
+            api_key = request.api_key.strip()
+            if not api_key:
+                raise HTTPException(status_code=400, detail="api_key cannot be empty")
+            os.environ["DEEPSEEK_API_KEY"] = api_key
+            runtime_client = DeepSeekClient(
+                api_key=api_key,
+                base_url=os.getenv("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/beta",
+                model=model or (runtime_client.model if runtime_client else os.getenv("DEEPSEEK_MODEL") or "deepseek-v4-flash"),
+            )
+            report_service.agent = DeepSeekPaperAgent(runtime_client)
+
         if request.report_read_timeout is not None:
             if request.report_read_timeout < 10 or request.report_read_timeout > 600:
                 raise HTTPException(
@@ -509,8 +536,7 @@ def create_app(
                 )
             set_report_read_timeout_seconds(request.report_read_timeout)
 
-        if request.model is not None:
-            model = request.model.strip()
+        if model is not None:
             if not model:
                 raise HTTPException(status_code=400, detail="model cannot be empty")
             runtime_client = _agent_deepseek_client(report_service)

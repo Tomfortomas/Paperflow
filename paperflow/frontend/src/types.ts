@@ -68,6 +68,15 @@ export interface ReadingReport {
   summary: Claim[];
   sections: ReportSection[];
   related_work: RelatedWorkItem[];
+  agent_run?: AgentRunMetrics | null;
+}
+
+export interface AgentRunMetrics {
+  model?: string | null;
+  elapsed_seconds?: number | null;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  total_tokens?: number | null;
 }
 
 export interface PaperChatRequest {
@@ -182,6 +191,7 @@ export interface PaperSession {
 export interface AgentStatus {
   configured: boolean;
   mode: string;
+  has_api_key?: boolean;
   model?: string | null;
 }
 
@@ -191,6 +201,7 @@ export interface AgentConfig extends AgentStatus {
 }
 
 export interface AgentConfigUpdate {
+  api_key?: string | null;
   model?: string | null;
   report_read_timeout?: number | null;
 }

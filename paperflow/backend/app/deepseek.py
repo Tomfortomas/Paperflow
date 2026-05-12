@@ -8,7 +8,7 @@ from typing import Optional
 
 import httpx
 
-from app.models import ReadingReport
+from app.models import AgentRunMetrics, ReadingReport
 
 
 REPORT_TEXT_BUDGET = 12000
@@ -127,11 +127,20 @@ class DeepSeekClient:
             timeout=_report_timeout(),
         )
         response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
+        response_payload = response.json()
+        content = response_payload["choices"][0]["message"]["content"]
         data = json.loads(content)
         data["paper_id"] = paper_id
         self._fill_missing_sources(data, source_name)
-        return ReadingReport.model_validate(data)
+        report = ReadingReport.model_validate(data)
+        usage = response_payload.get("usage") or {}
+        report.agent_run = AgentRunMetrics(
+            model=self.model,
+            prompt_tokens=usage.get("prompt_tokens"),
+            completion_tokens=usage.get("completion_tokens"),
+            total_tokens=usage.get("total_tokens"),
+        )
+        return report
 
     def _fill_missing_sources(self, data: dict, source_name: str) -> None:
         for claim in data.get("summary", []):

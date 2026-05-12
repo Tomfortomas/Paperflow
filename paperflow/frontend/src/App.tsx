@@ -45,6 +45,10 @@ const UI_TEXT = {
     agentTimeout: "报告超时（秒）",
     saveAgentConfig: "保存 Agent 配置",
     agentConfigHint: "新配置会在下一次导入或重新运行 Agent 时生效。",
+    agentApiKey: "DeepSeek API Key",
+    agentApiKeyPlaceholder: "输入新的 API Key，不会回显",
+    agentApiKeyConfigured: "Key 已配置",
+    agentApiKeyMissing: "Key 未配置",
     configured: "已配置",
     missingKey: "缺少 key",
     languageToggle: "English",
@@ -206,6 +210,10 @@ const UI_TEXT = {
     agentTimeout: "Report Timeout (seconds)",
     saveAgentConfig: "Save Agent Config",
     agentConfigHint: "New settings apply to the next import or Agent rerun.",
+    agentApiKey: "DeepSeek API Key",
+    agentApiKeyPlaceholder: "Enter a new API key; it will not be echoed",
+    agentApiKeyConfigured: "Key configured",
+    agentApiKeyMissing: "Key missing",
     configured: "configured",
     missingKey: "missing key",
     languageToggle: "中文",
@@ -385,6 +393,16 @@ export function App({
     void refreshLibrary();
   }, [client, initialPapers.length]);
 
+  useEffect(() => {
+    if (agentConfigMessage !== text.agentConfigSaved) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setAgentConfigMessage(null);
+    }, 2200);
+    return () => window.clearTimeout(timer);
+  }, [agentConfigMessage, text.agentConfigSaved]);
+
   async function refreshLibrary() {
     try {
       const [library, agent, config] = await Promise.all([
@@ -396,6 +414,7 @@ export function App({
       setAgentStatus(agent);
       setAgentConfig(config);
       setAgentConfigDraft({
+        api_key: "",
         model: config.model ?? "",
         report_read_timeout: config.report_read_timeout,
       });
@@ -409,19 +428,26 @@ export function App({
       return;
     }
     const model = String(agentConfigDraft.model ?? "").trim();
+    const apiKey = String(agentConfigDraft.api_key ?? "").trim();
     const timeout = Number(agentConfigDraft.report_read_timeout);
     try {
-      const updated = await client.updateAgentConfig({
+      const payload: AgentConfigUpdate = {
         model,
         report_read_timeout: Number.isFinite(timeout) ? timeout : agentConfig.report_read_timeout,
-      });
+      };
+      if (apiKey) {
+        payload.api_key = apiKey;
+      }
+      const updated = await client.updateAgentConfig(payload);
       setAgentConfig(updated);
       setAgentStatus({
         configured: updated.configured,
+        has_api_key: updated.has_api_key,
         mode: updated.mode,
         model: updated.model,
       });
       setAgentConfigDraft({
+        api_key: "",
         model: updated.model ?? "",
         report_read_timeout: updated.report_read_timeout,
       });
@@ -543,7 +569,9 @@ export function App({
       return;
     }
     if (paper.status?.stage !== "completed") {
-      void pollPaper(paper.id);
+      if (paper.status?.stage !== "failed") {
+        void pollPaper(paper.id);
+      }
       return;
     }
     try {
@@ -1174,6 +1202,7 @@ function Workspace({
                 : text.reportNotReady}
             </p>
           </div>
+          <AgentParseTrace locale={locale} paper={paper} />
         </section>
         <Rail
           agentConfig={agentConfig}
@@ -1217,6 +1246,7 @@ function Workspace({
           <h2 className="eyebrow">{text.readingReport}</h2>
           <h1>{displayTitle}</h1>
           <p className="path-line">{paper.pdf_path}</p>
+          <ReportRunMetrics report={report} />
           <div className="report-head-tools">
             <StatusBadge locale={locale} status={paper.status} />
             {isReportReady ? (
@@ -1390,6 +1420,138 @@ function ImportActivityBanner({
   );
 }
 
+function AgentParseTrace({ locale, paper }: { locale: Locale; paper: Paper }) {
+  const status = paper.status;
+  if (!status || status.stage === "completed") {
+    return null;
+  }
+  const isFailed = status.stage === "failed";
+  const isProcessing = status.stage === "processing";
+  const isQueued = status.stage === "queued";
+  const labels =
+    locale === "zh"
+      ? {
+          title: "Agent 解析过程",
+          hint: "这些是当前任务阶段的轻量过程输出，用来说明 Agent 卡在哪里。",
+          received: "接收论文",
+          prepare: "准备 PDF 文本与上下文",
+          model: "等待 DeepSeek 生成阅读报告",
+          persist: "写入报告与证据定位",
+          done: "完成",
+          running: "进行中",
+          pending: "等待",
+          failed: "失败点",
+          receivedDetail: "PDF / 元数据已进入本地任务队列。",
+          prepareDetail: "正在抽取可读文本、构造 Reading Report 上下文。",
+          modelDetail: "模型需要返回结构化 JSON、R0/R1/R2 和证据。",
+          persistDetail: "报告生成后会落盘，并尝试定位 evidence 页码与位置。",
+        }
+      : {
+          title: "Agent Parsing Trace",
+          hint: "A lightweight trace of the current parsing stage.",
+          received: "Receive paper",
+          prepare: "Prepare PDF text and context",
+          model: "Wait for DeepSeek reading report",
+          persist: "Save report and locate evidence",
+          done: "done",
+          running: "running",
+          pending: "pending",
+          failed: "failed here",
+          receivedDetail: "PDF / metadata entered the local task queue.",
+          prepareDetail: "Extracting readable text and report context.",
+          modelDetail: "The model must return structured JSON, R0/R1/R2, and evidence.",
+          persistDetail: "The report is saved and evidence locations are resolved after generation.",
+        };
+  const steps = [
+    {
+      id: "received",
+      title: labels.received,
+      detail: labels.receivedDetail,
+      state: "completed",
+    },
+    {
+      id: "prepare",
+      title: labels.prepare,
+      detail: labels.prepareDetail,
+      state: isQueued ? "running" : "completed",
+    },
+    {
+      id: "model",
+      title: labels.model,
+      detail: isFailed ? localizeTaskMessage(status.message, locale) : labels.modelDetail,
+      state: isFailed ? "failed" : isProcessing ? "running" : "pending",
+    },
+    {
+      id: "persist",
+      title: labels.persist,
+      detail: labels.persistDetail,
+      state: isFailed ? "pending" : isProcessing ? "pending" : "pending",
+    },
+  ];
+  const statusLabel = (state: string) => {
+    if (state === "completed") return labels.done;
+    if (state === "running") return labels.running;
+    if (state === "failed") return labels.failed;
+    return labels.pending;
+  };
+  return (
+    <section className="agent-parse-trace" aria-label={labels.title}>
+      <div className="agent-parse-trace-head">
+        <h3>{labels.title}</h3>
+        <p>{labels.hint}</p>
+      </div>
+      <ol>
+        {steps.map((step) => (
+          <li className={`agent-parse-step is-${step.state}`} key={step.id}>
+            <span className="agent-parse-dot" aria-hidden="true" />
+            <div>
+              <div className="agent-parse-step-head">
+                <strong>{step.title}</strong>
+                <span>{statusLabel(step.state)}</span>
+              </div>
+              <p>{step.detail}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function ReportRunMetrics({ report }: { report: ReadingReport }) {
+  const metrics = report.agent_run;
+  if (!metrics?.elapsed_seconds && !metrics?.total_tokens) {
+    return null;
+  }
+  const bits = [];
+  if (metrics.total_tokens) {
+    bits.push(`${formatTokenCount(metrics.total_tokens)} tokens`);
+  }
+  if (metrics.elapsed_seconds) {
+    bits.push(`${formatDuration(metrics.elapsed_seconds)}`);
+  }
+  if (bits.length === 0) {
+    return null;
+  }
+  return <p className="report-run-metrics">解析指标 · {bits.join(" · ")}</p>;
+}
+
+function formatTokenCount(tokens: number) {
+  if (tokens >= 1000) {
+    return `${(tokens / 1000).toFixed(tokens >= 10000 ? 0 : 1)}k`;
+  }
+  return String(tokens);
+}
+
+function formatDuration(seconds: number) {
+  if (seconds >= 60) {
+    const minutes = Math.floor(seconds / 60);
+    const rest = Math.round(seconds % 60);
+    return `${minutes}m ${rest}s`;
+  }
+  return `${seconds.toFixed(seconds >= 10 ? 0 : 1)}s`;
+}
+
 function AgentConfigPanel({
   config,
   draft,
@@ -1411,56 +1573,120 @@ function AgentConfigPanel({
   }
   const modelOptions = Array.isArray(config.model_options) ? config.model_options : [];
   const modelValue = String(draft.model ?? config.model ?? "");
+  const apiKeyValue = String(draft.api_key ?? "");
   const timeoutValue = String(draft.report_read_timeout ?? config.report_read_timeout ?? 45);
-  const listId = `agent-model-options-${locale}`;
+  const modelChoices = Array.from(new Set([modelValue, ...modelOptions].filter(Boolean)));
+  const timeoutChoices = [45, 90, 120, 180];
+  const messageKind =
+    message && message === text.agentConfigSaved ? "success" : message ? "failed" : null;
   return (
-    <section className="agent-config-panel">
-      <div className="agent-config-head">
-        <div>
-          <h2 className="label-section">{text.agentConfig}</h2>
-          <p>{text.agentConfigHint}</p>
-        </div>
+    <details className="agent-config-panel">
+      <summary className="agent-config-summary">
+        <span>
+          <span className="label-section">{text.agentConfig}</span>
+          <span className="agent-config-current">
+            {config.has_api_key ? text.agentApiKeyConfigured : text.agentApiKeyMissing} ·{" "}
+            {modelValue || config.mode} · {timeoutValue}s
+          </span>
+        </span>
         <span className={`agent-chip ${config.configured ? "ready" : "missing"}`}>
           {config.mode}
         </span>
-      </div>
-      <div className="agent-config-grid">
-        <label>
-          <span>{text.agentModel}</span>
+      </summary>
+      <div className="agent-config-stack">
+        <p className="agent-config-hint">{text.agentConfigHint}</p>
+        <label className="agent-config-field">
+          <span className="agent-config-label">{text.agentApiKey}</span>
           <input
-            aria-label={text.agentModel}
-            list={listId}
-            value={modelValue}
-            onChange={(event) => onChange({ ...draft, model: event.target.value })}
+            className="agent-config-input"
+            aria-label={text.agentApiKey}
+            autoComplete="off"
+            placeholder={text.agentApiKeyPlaceholder}
+            type="password"
+            value={apiKeyValue}
+            onChange={(event) => onChange({ ...draft, api_key: event.target.value })}
           />
-          <datalist id={listId}>
-            {Array.from(new Set([modelValue, ...modelOptions].filter(Boolean))).map(
-              (model) => (
-                <option key={model} value={model} />
-              ),
-            )}
-          </datalist>
+          <span className={`agent-key-state ${config.has_api_key ? "ready" : "missing"}`}>
+            {config.has_api_key ? text.agentApiKeyConfigured : text.agentApiKeyMissing}
+          </span>
         </label>
-        <label>
-          <span>{text.agentTimeout}</span>
-          <input
-            aria-label={text.agentTimeout}
-            min={10}
-            max={600}
-            type="number"
-            value={timeoutValue}
-            onChange={(event) =>
-              onChange({ ...draft, report_read_timeout: Number(event.target.value) })
-            }
-          />
-        </label>
-        <button type="button" className="btn-ghost" onClick={onSave}>
-          {text.saveAgentConfig}
-        </button>
+        <div className="agent-config-field">
+          <span className="agent-config-label">{text.agentModel}</span>
+          <div className="agent-model-options" role="group" aria-label={text.agentModel}>
+            {modelChoices.map((model) => (
+              <button
+                type="button"
+                className={`agent-option ${model === modelValue ? "selected" : ""}`}
+                aria-pressed={model === modelValue}
+                key={model}
+                onClick={() => onChange({ ...draft, model })}
+              >
+                <span>{modelName(model)}</span>
+                <small>{model}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="agent-config-field">
+          <span className="agent-config-label">{text.agentTimeout}</span>
+          <div className="agent-timeout-row">
+            <div className="agent-timeout-presets">
+              {timeoutChoices.map((seconds) => (
+                <button
+                  type="button"
+                  className={`agent-timeout-pill ${Number(timeoutValue) === seconds ? "selected" : ""}`}
+                  aria-pressed={Number(timeoutValue) === seconds}
+                  key={seconds}
+                  onClick={() => onChange({ ...draft, report_read_timeout: seconds })}
+                >
+                  {seconds}s
+                </button>
+              ))}
+            </div>
+            <label className="agent-timeout-custom">
+              <input
+                aria-label={text.agentTimeout}
+                min={10}
+                max={600}
+                type="number"
+                value={timeoutValue}
+                onChange={(event) =>
+                  onChange({ ...draft, report_read_timeout: Number(event.target.value) })
+                }
+              />
+              <span>s</span>
+            </label>
+          </div>
+        </div>
+        <div className="agent-config-actions">
+          <button type="button" className="btn-ghost" onClick={onSave}>
+            {text.saveAgentConfig}
+          </button>
+          {message ? (
+            <span className={`agent-config-message is-${messageKind}`} role="status">
+              {message}
+            </span>
+          ) : null}
+        </div>
       </div>
-      {message ? <p className="agent-config-message">{message}</p> : null}
-    </section>
+    </details>
   );
+}
+
+function modelName(model: string) {
+  if (model.includes("flash")) {
+    return "Flash";
+  }
+  if (model.includes("pro")) {
+    return "Pro";
+  }
+  if (model.includes("reasoner")) {
+    return "Reasoner";
+  }
+  if (model.includes("chat")) {
+    return "Chat";
+  }
+  return "Custom";
 }
 
 function PaperProcessingLine({
@@ -1608,8 +1834,10 @@ function Rail({
   return (
     <aside className="workspace-rail">
       <section className="rail-block">
-        <p className="label-section">{text.agentStatus}</p>
-        <StatusBadge locale={locale} status={paper.status} />
+        <div className="rail-block-head">
+          <p className="label-section">{text.agentStatus}</p>
+          <StatusBadge locale={locale} status={paper.status} />
+        </div>
         <p className="rail-message">
           {paper.status?.message
             ? localizeTaskMessage(paper.status.message, locale)
@@ -1630,7 +1858,9 @@ function Rail({
       />
 
       <section className="rail-block">
-        <p className="label-section">{text.evidenceDetail}</p>
+        <div className="rail-block-head">
+          <p className="label-section">{text.evidenceDetail}</p>
+        </div>
         {selectedClaim ? (
           <>
             <p className="rail-evidence-claim">{selectedClaim.text}</p>
@@ -1732,7 +1962,9 @@ function Rail({
       </section>
 
       <section className="rail-block">
-        <p className="label-section">{text.obsidian}</p>
+        <div className="rail-block-head">
+          <p className="label-section">{text.obsidian}</p>
+        </div>
         <button
           type="button"
           className="btn-link"

@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import type { Paper, ReadingReport } from "./types";
@@ -52,6 +52,10 @@ const report: ReadingReport = {
 };
 
 describe("Paperflow app", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("loads the default library only once on initial render", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -88,6 +92,28 @@ describe("Paperflow app", () => {
     expect(screen.getByRole("button", { name: /打开 paperflow/i })).toHaveTextContent(/^打开$/);
     expect(screen.getByRole("button", { name: /删除 paperflow/i })).toHaveTextContent(/^删除$/);
     expect(screen.getByRole("button", { name: /删除 paperflow/i })).toHaveClass("btn-secondary");
+  });
+
+  it("shows subtle parse metrics in the report header", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        initialPapers={[paper]}
+        initialReports={{
+          "paper-1": {
+            ...report,
+            agent_run: {
+              elapsed_seconds: 12.4,
+              total_tokens: 1532,
+            },
+          },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+
+    expect(screen.getByText(/解析指标 · 1\.5k tokens · 12s/)).toBeInTheDocument();
   });
 
   it("deletes a paper after inline confirmation", async () => {
@@ -357,6 +383,28 @@ describe("Paperflow app", () => {
     );
   });
 
+  it("shows an intermediate Agent parsing trace for failed papers", async () => {
+    const user = userEvent.setup();
+    const failedPaper: Paper = {
+      ...paper,
+      status: {
+        stage: "failed",
+        message:
+          "DeepSeek report generation timed out. The PDF may be long or the model may be slow; retry later or increase DEEPSEEK_REPORT_READ_TIMEOUT.",
+        progress: 1,
+      },
+    };
+
+    render(<App initialPapers={[failedPaper]} />);
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+
+    expect(screen.getByText(/Agent 解析过程/)).toBeInTheDocument();
+    expect(screen.getByText(/准备 PDF 文本与上下文/)).toBeInTheDocument();
+    expect(screen.getByText(/等待 DeepSeek 生成阅读报告/)).toBeInTheDocument();
+    expect(screen.getByText(/失败点/)).toBeInTheDocument();
+  });
+
   it("imports an arXiv link and opens the report after download completes", async () => {
     const user = userEvent.setup();
     const arxivPaper: Paper = {
@@ -443,10 +491,12 @@ describe("Paperflow app", () => {
   });
 
   it("lets users update the DeepSeek model and report timeout", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup();
     const client = fakeClient({
       getAgentConfig: vi.fn().mockResolvedValue({
         configured: true,
+        has_api_key: true,
         mode: "deepseek",
         model: "deepseek-v4-flash",
         model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
@@ -454,6 +504,7 @@ describe("Paperflow app", () => {
       }),
       updateAgentConfig: vi.fn().mockResolvedValue({
         configured: true,
+        has_api_key: true,
         mode: "deepseek",
         model: "deepseek-v4-pro",
         model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
@@ -463,9 +514,9 @@ describe("Paperflow app", () => {
 
     render(<App client={client} />);
 
-    const modelInput = await screen.findByLabelText(/DeepSeek 模型/i);
-    await user.clear(modelInput);
-    await user.type(modelInput, "deepseek-v4-pro");
+    expect(await screen.findByText(/deepseek-v4-flash · 45s/)).toBeInTheDocument();
+    await user.click(screen.getByText(/^Agent 配置$/i));
+    await user.click(await screen.findByRole("button", { name: /Pro/i }));
     const timeoutInput = screen.getByLabelText(/报告超时/i);
     await user.clear(timeoutInput);
     await user.type(timeoutInput, "120");
@@ -476,6 +527,45 @@ describe("Paperflow app", () => {
       report_read_timeout: 120,
     });
     expect(await screen.findByText(/Agent 配置已保存/)).toBeInTheDocument();
+    vi.advanceTimersByTime(2300);
+    await waitFor(() =>
+      expect(screen.queryByText(/Agent 配置已保存/)).not.toBeInTheDocument(),
+    );
+  });
+
+  it("lets users update the DeepSeek API key without echoing it", async () => {
+    const user = userEvent.setup();
+    const client = fakeClient({
+      getAgentConfig: vi.fn().mockResolvedValue({
+        configured: false,
+        has_api_key: false,
+        mode: "missing-key",
+        model: null,
+        model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
+        report_read_timeout: 45,
+      }),
+      updateAgentConfig: vi.fn().mockResolvedValue({
+        configured: true,
+        has_api_key: true,
+        mode: "deepseek",
+        model: "deepseek-v4-flash",
+        model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
+        report_read_timeout: 45,
+      }),
+    });
+
+    render(<App client={client} />);
+
+    await user.click(await screen.findByText(/^Agent 配置$/i));
+    await user.type(screen.getByLabelText(/DeepSeek API Key/i), "sk-local-test");
+    await user.click(screen.getByRole("button", { name: /保存 Agent 配置/i }));
+
+    expect(client.updateAgentConfig).toHaveBeenCalledWith({
+      api_key: "sk-local-test",
+      model: "",
+      report_read_timeout: 45,
+    });
+    expect(screen.queryByDisplayValue("sk-local-test")).not.toBeInTheDocument();
   });
 });
 
@@ -513,6 +603,7 @@ function fakeClient(overrides: Partial<PaperflowClient> = {}): PaperflowClient {
     getAgentStatus: vi.fn().mockResolvedValue({ configured: true, mode: "injected", model: null }),
     getAgentConfig: vi.fn().mockResolvedValue({
       configured: true,
+      has_api_key: true,
       mode: "injected",
       model: null,
       model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],

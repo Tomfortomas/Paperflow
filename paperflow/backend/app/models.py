@@ -67,12 +67,21 @@ class RelatedWorkItem(BaseModel):
     comparison_risk: Optional[str] = None
 
 
+class AgentRunMetrics(BaseModel):
+    model: Optional[str] = None
+    elapsed_seconds: Optional[float] = None
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+
+
 class ReadingReport(BaseModel):
     paper_id: str
     paper_title: Optional[str] = None
     summary: List[Claim] = Field(default_factory=list)
     sections: List[ReportSection] = Field(default_factory=list)
     related_work: List[RelatedWorkItem] = Field(default_factory=list)
+    agent_run: Optional[AgentRunMetrics] = None
 
 
 class PaperChatRequest(BaseModel):

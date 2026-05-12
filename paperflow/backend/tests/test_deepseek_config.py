@@ -82,7 +82,12 @@ def test_deepseek_report_prompt_requires_chinese_explanations(monkeypatch) -> No
                             )
                         }
                     }
-                ]
+                ],
+                "usage": {
+                    "prompt_tokens": 123,
+                    "completion_tokens": 45,
+                    "total_tokens": 168,
+                },
             }
         )
 
@@ -102,6 +107,9 @@ def test_deepseek_report_prompt_requires_chinese_explanations(monkeypatch) -> No
     assert "not the PDF filename" in user_prompt
     assert captured["timeout"].read <= 45
     assert report.paper_title == "Evidence-Aware Workflows"
+    assert report.agent_run is not None
+    assert report.agent_run.model == "deepseek-v4-flash"
+    assert report.agent_run.total_tokens == 168
     assert report.summary[0].text == "本文提出一个带证据的论文阅读工作流。"
     assert report.summary[0].evidence[0].quote == "We introduce an evidence-aware workflow."
 

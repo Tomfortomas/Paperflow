@@ -36,6 +36,7 @@ def test_import_lists_reads_asks_and_exports_note(tmp_path: Path) -> None:
     report = client.get(f"/api/papers/{paper_id}/report").json()
     assert report["summary"][0]["reliability"] == "R0"
     assert report["related_work"][0]["reliability"] == "R1"
+    assert report["agent_run"]["elapsed_seconds"] is not None
 
     answer = client.post(
         f"/api/papers/{paper_id}/ask",
@@ -331,6 +332,29 @@ def test_agent_config_endpoint_updates_model_and_timeout(tmp_path: Path, monkeyp
         assert client.get("/api/agent/status").json()["model"] == "deepseek-v4-pro"
     finally:
         set_report_read_timeout_seconds(None)
+
+
+def test_agent_config_endpoint_accepts_api_key_without_echoing_it(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("DEEPSEEK_CONFIG_PATH", str(tmp_path / "missing.toml"))
+    app = create_app(tmp_path / "data")
+    client = TestClient(app)
+
+    initial = client.get("/api/agent/config").json()
+    assert initial["configured"] is False
+    assert initial["has_api_key"] is False
+
+    updated = client.put(
+        "/api/agent/config",
+        json={"api_key": "runtime-key", "model": "deepseek-v4-pro"},
+    )
+
+    payload = updated.json()
+    assert updated.status_code == 200
+    assert payload["configured"] is True
+    assert payload["has_api_key"] is True
+    assert payload["model"] == "deepseek-v4-pro"
+    assert "runtime-key" not in str(payload)
 
 
 def test_missing_agent_configuration_surfaces_failed_status(tmp_path: Path, monkeypatch) -> None:
