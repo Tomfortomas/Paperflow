@@ -40,9 +40,9 @@ The product stance is simple: **report first, chat second, evidence always**.
 
 ## News
 
-- **2026-05-12 — V3.5 completed.** Agent chat transcripts are persisted, SSE chat streaming is available, evidence clicks can open the PDF viewer, and Field Map edges now include Agent enrichment metadata.
-- **2026-05-12 — V3 released.** The Workspace gained a formal right-rail Agent conversation panel with transcript, process cards, status, composer, and paper-scoped chat API.
-- **2026-05-12 — V2 completed.** Evidence workflow, metadata import, R1 search, Field Map, compare, R2 insights, and task queue support landed.
+- **2026-05-12 — v0.4 completed.** Agent chat transcripts are persisted, SSE chat streaming is available, evidence clicks can open the PDF viewer, and Field Map edges now include Agent enrichment metadata.
+- **2026-05-12 — v0.3 released.** The Workspace gained a formal right-rail Agent conversation panel with transcript, process cards, status, composer, and paper-scoped chat API.
+- **2026-05-12 — v0.2 completed.** Evidence workflow, metadata import, R1 search, Field Map, compare, R2 insights, and task queue support landed.
 - **2026-05-12 — Project page added.** A lightweight static landing page is available at [`index.html`](./index.html).
 
 ---
@@ -369,7 +369,7 @@ Paperflow currently ships two front-ends on top of the same backend agent harnes
 - **Web**: React + Vite + TypeScript, report-first Workspace, PDF viewer, Agent rail, and Obsidian export.
 - **TUI**: Textual + httpx, keyboard-driven Library / Workspace / R0-R1-R2 / Evidence / Q&A flow.
 
-### V1.1
+### v0.1
 
 - [x] Library-first home with status tracking (`queued` -> `processing` -> `completed` / `failed`)
 - [x] DeepSeek-backed PaperAgent generating R0 Reading Reports
@@ -379,7 +379,7 @@ Paperflow currently ships two front-ends on top of the same backend agent harnes
 - [x] Obsidian-native paper note export
 - [x] Focused Q&A around dataset / benchmark / method / compute / limitations
 
-### V2
+### v0.2
 
 - [x] **Evidence Workflow**: PyMuPDF block parser, evidence verification, PDF.js page jump, bbox highlight, and select-to-ask.
 - [x] **Metadata & Import**: arXiv, CrossRef, Semantic Scholar, OpenReview, Zotero, and DOI/arXiv/content-hash deduplication.
@@ -387,14 +387,14 @@ Paperflow currently ships two front-ends on top of the same backend agent harnes
 - [x] **Field Map**: milestones, timeline, task taxonomy, datasets, benchmarks, method families, open problems, trends, and R2 opportunities.
 - [x] **Compare + R2 + Task Queue**: multi-paper compare, research insights, Field Map Obsidian export, cancel/retry/resume task APIs.
 
-### V3
+### v0.3
 
 - [x] Formal Agent Conversation rail replacing the old focused Q&A area.
 - [x] Paper-scoped chat API: `POST /api/papers/{paper_id}/chat`.
 - [x] Evidence-aware chat inputs: selected claim, evidence, page, quote, and section.
 - [x] Right-rail information architecture for Agent status, config, evidence, chat, and Obsidian export.
 
-### V3.5
+### v0.4
 
 - [x] Chunked full-paper Reading Reports over bounded DeepSeek chunks.
 - [x] Dynamic partial reports so the first key findings appear before full completion.

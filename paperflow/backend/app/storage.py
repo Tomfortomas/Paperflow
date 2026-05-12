@@ -484,7 +484,7 @@ class PaperStorage:
     # --------------------------------------------------------------- delete
 
     def delete_papers_by_title(self, title: str, pdf_path: Optional[Path] = None) -> None:
-        """Legacy V1.1 helper kept for backward compatibility."""
+        """Legacy v0.1 helper kept for backward compatibility."""
 
         with self._connect() as conn:
             if pdf_path is None:

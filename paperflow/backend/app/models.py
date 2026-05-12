@@ -28,7 +28,7 @@ class Evidence(BaseModel):
     page: Optional[int] = None
     section: Optional[str] = None
     quote: str
-    # Phase 1 fields (defaults keep V1.1 reports valid):
+    # Phase 1 fields (defaults keep v0.1 reports valid):
     bbox: Optional[List[float]] = None
     location_status: EvidenceLocationStatus = EvidenceLocationStatus.PAGE_AND_QUOTE
 

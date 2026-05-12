@@ -40,9 +40,9 @@ Paperflow 把读论文变成一个可追溯、可积累的本地研究流程：
 
 ## News
 
-- **2026-05-12 — V3.5 完成。** Agent Chat 已持久化，支持 SSE 对话流，evidence 可打开 PDF 并跳页，Field Map 关系边加入 Agent enrichment 元数据。
-- **2026-05-12 — V3 发布。** Workspace 右侧升级为正式 Agent 对话栏，包含 transcript、process cards、status、composer 和 paper-scoped chat API。
-- **2026-05-12 — V2 完成。** Evidence workflow、metadata import、R1 search、Field Map、compare、R2 insights、task queue 全部落地。
+- **2026-05-12 — v0.4 完成。** Agent Chat 已持久化，支持 SSE 对话流，evidence 可打开 PDF 并跳页，Field Map 关系边加入 Agent enrichment 元数据。
+- **2026-05-12 — v0.3 发布。** Workspace 右侧升级为正式 Agent 对话栏，包含 transcript、process cards、status、composer 和 paper-scoped chat API。
+- **2026-05-12 — v0.2 完成。** Evidence workflow、metadata import、R1 search、Field Map、compare、R2 insights、task queue 全部落地。
 - **2026-05-12 — 项目首页加入仓库。** 可通过 [`index.html`](./index.html) 查看轻量 landing page。
 
 ---
@@ -369,7 +369,7 @@ Paperflow 当前有两个前端，共用同一个后端 Agent harness：
 - **Web**：React + Vite + TypeScript，report-first Workspace、PDF viewer、Agent rail、Obsidian export。
 - **TUI**：Textual + httpx，键盘驱动 Library / Workspace / R0-R1-R2 / Evidence / Q&A flow。
 
-### V1.1
+### v0.1
 
 - [x] Library-first home with status tracking (`queued` -> `processing` -> `completed` / `failed`)
 - [x] DeepSeek-backed PaperAgent generating R0 Reading Reports
@@ -379,7 +379,7 @@ Paperflow 当前有两个前端，共用同一个后端 Agent harness：
 - [x] Obsidian-native paper note export
 - [x] Focused Q&A around dataset / benchmark / method / compute / limitations
 
-### V2
+### v0.2
 
 - [x] **Evidence Workflow**：PyMuPDF block parser、evidence verification、PDF.js page jump、bbox highlight、select-to-ask。
 - [x] **Metadata & Import**：arXiv、CrossRef、Semantic Scholar、OpenReview、Zotero、DOI/arXiv/content-hash dedup。
@@ -387,14 +387,14 @@ Paperflow 当前有两个前端，共用同一个后端 Agent harness：
 - [x] **Field Map**：milestones、timeline、task taxonomy、datasets、benchmarks、method families、open problems、trends、R2 opportunities。
 - [x] **Compare + R2 + Task Queue**：多论文 compare、research insights、Field Map Obsidian export、cancel/retry/resume task APIs。
 
-### V3
+### v0.3
 
 - [x] 正式 Agent Conversation rail，替代旧 focused Q&A 区域。
 - [x] Paper-scoped chat API：`POST /api/papers/{paper_id}/chat`。
 - [x] Evidence-aware chat inputs：selected claim、evidence、page、quote、section。
 - [x] 右侧 rail 信息架构：Agent status、config、evidence、chat、Obsidian export。
 
-### V3.5
+### v0.4
 
 - [x] Chunked full-paper Reading Reports over bounded DeepSeek chunks.
 - [x] Dynamic partial reports so the first key findings appear before full completion.

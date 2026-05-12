@@ -1,4 +1,4 @@
-"""R1 search pipeline — implements V2 PRD §4.6.
+"""R1 search pipeline — implements v0.2 PRD §4.6.
 
 Six lanes, each producing a ranked list of :class:`R1Candidate`:
 

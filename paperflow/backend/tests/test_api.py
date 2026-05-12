@@ -8,8 +8,9 @@ from fastapi.testclient import TestClient
 from app.main import create_app, extract_arxiv_id
 from app.deepseek import set_report_read_timeout_seconds
 from app.metadata import MetadataError
-from app.models import ImportSourceType, PaperMetadata, ReadingReport
+from app.models import ImportSourceType, PaperMetadata, ReadingReport, TaskStatus
 from app.report_service import ReportService
+from app.storage import PaperStorage
 from tests.test_core_pipeline import FakePaperAgent
 
 
@@ -242,6 +243,30 @@ def test_processing_import_is_marked_failed_after_app_restart(tmp_path: Path) ->
     assert status["stage"] == "failed"
     assert "Backend restarted" in status["message"]
     blocking_service.release.set()
+
+
+def test_restart_marks_processing_paper_completed_when_report_exists(tmp_path: Path) -> None:
+    storage_root = tmp_path / "data"
+    app = create_app(storage_root, report_service=ReportService(agent=FakePaperAgent()))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("stale-processing.pdf", b"Abstract: stale", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+    wait_for_status(client, paper_id, "completed")
+
+    PaperStorage(storage_root).update_status(
+        paper_id,
+        TaskStatus(stage="processing", message="DeepSeek report generation is running", progress=0.35),
+    )
+
+    restarted_client = TestClient(create_app(storage_root, report_service=ReportService(agent=FakePaperAgent())))
+    status = restarted_client.get(f"/api/papers/{paper_id}/status").json()
+
+    assert status["stage"] == "completed"
+    assert status["message"] == "Reading report generated"
 
 
 def test_delete_paper_removes_library_entry_and_artifacts(tmp_path: Path) -> None:

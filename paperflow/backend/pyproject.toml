@@ -1,7 +1,7 @@
 [project]
 name = "paperflow-backend"
 version = "0.1.0"
-description = "Paperflow V1 backend"
+description = "Paperflow v0.1 backend"
 requires-python = ">=3.9"
 dependencies = [
   "fastapi",

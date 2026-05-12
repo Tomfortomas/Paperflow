@@ -121,13 +121,30 @@ def _mark_interrupted_report_runs(storage: PaperStorage) -> None:
         if paper.status.stage not in {"queued", "processing"}:
             continue
         try:
-            storage.load_report(paper.id)
+            report = storage.load_report(paper.id)
         except FileNotFoundError:
             storage.update_status(
                 paper.id,
                 TaskStatus(
                     stage="failed",
                     message="Backend restarted while PaperAgent was running. Please rerun the Agent.",
+                    progress=1.0,
+                ),
+            )
+            continue
+
+        coverage = report.agent_run.coverage_percent if report.agent_run else None
+        if coverage is None or coverage >= 0.999:
+            storage.update_status(
+                paper.id,
+                TaskStatus(stage="completed", message="Reading report generated", progress=1.0),
+            )
+        else:
+            storage.update_status(
+                paper.id,
+                TaskStatus(
+                    stage="failed",
+                    message="Backend restarted while PaperAgent was running. Partial report is available; rerun the Agent to complete it.",
                     progress=1.0,
                 ),
             )
@@ -796,7 +813,7 @@ def create_app(
         """Run the 6-lane R1 pipeline for ``paper_id`` and persist the result.
 
         The new R1 items overwrite the report's ``related_work`` so the
-        Workspace immediately sees real candidates instead of the V1
+        Workspace immediately sees real candidates instead of the v0.1
         placeholder.
         """
 
