@@ -1449,6 +1449,7 @@ input[type="file"]::file-selector-button:hover {
   padding-bottom: var(--space-5);
   margin-top: var(--space-5);
   border-bottom: 1px solid var(--rule-strong);
+  scroll-margin-top: var(--space-7);
 }
 .report-head .eyebrow {
   margin-bottom: var(--space-2);
@@ -2400,6 +2401,7 @@ input[type="file"]::file-selector-button:hover {
 
 .agent-chat {
   gap: var(--space-3);
+  scroll-margin-top: var(--space-7);
 }
 .agent-chat-head {
   display: flex;
@@ -2407,10 +2409,17 @@ input[type="file"]::file-selector-button:hover {
   justify-content: space-between;
   gap: var(--space-3);
 }
+.agent-chat-head-actions {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+}
 .agent-chat-status {
   font-family: var(--font-mono);
   font-size: var(--t-micro);
   color: var(--ink-4);
+  white-space: nowrap;
 }
 .agent-chat-status.is-running {
   color: var(--r1-ink);
@@ -2502,6 +2511,7 @@ input[type="file"]::file-selector-button:hover {
   bottom: var(--space-3);
   padding-top: var(--space-2);
   background: color-mix(in oklch, var(--paper-1) 78%, var(--paper-2));
+  scroll-margin-bottom: var(--space-7);
 }
 .agent-composer .btn-link {
   align-self: flex-end;

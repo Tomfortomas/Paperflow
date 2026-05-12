@@ -99,6 +99,7 @@ const UI_TEXT = {
     navPapers: "论文",
     navReport: "报告",
     navFieldMap: "Field Map",
+    navAgent: "Agent",
     noNote: "尚未保存 Obsidian 笔记",
     backToLibrary: "返回文献库",
     reportNotReady: "Agent 报告还没生成。",
@@ -110,6 +111,8 @@ const UI_TEXT = {
     agentStatus: "Agent 状态",
     noActiveTask: "当前没有任务。",
     rerunAgent: "重新运行 Agent",
+    jumpToAgent: "跳到 Agent",
+    jumpToChatInput: "回到输入框",
     evidenceDetail: "证据详情",
     missingEvidence: "缺少证据。",
     selectClaim: "选择一个 claim 查看证据。",
@@ -271,6 +274,7 @@ const UI_TEXT = {
     navPapers: "Papers",
     navReport: "Report",
     navFieldMap: "Field Map",
+    navAgent: "Agent",
     noNote: "No Obsidian note yet",
     backToLibrary: "Back to Library",
     reportNotReady: "Agent report is not ready yet.",
@@ -283,6 +287,8 @@ const UI_TEXT = {
     agentStatus: "Agent Status",
     noActiveTask: "No active task.",
     rerunAgent: "Re-run Agent",
+    jumpToAgent: "Jump to Agent",
+    jumpToChatInput: "Back to input",
     evidenceDetail: "Evidence Detail",
     missingEvidence: "Missing evidence.",
     selectClaim: "Select a claim to inspect its evidence.",
@@ -987,6 +993,7 @@ function TopNav({
           <>
             <a href="#report">{text.navReport}</a>
             <a href="#field-map">{text.navFieldMap}</a>
+            <a href="#agent-chat">{text.navAgent}</a>
           </>
         )}
         <span
@@ -1426,6 +1433,15 @@ function Workspace({
                 {pdfViewerOpen ? text.disableViewer : text.enableViewer}
               </button>
             ) : null}
+            <a className="btn-ghost" href="#agent-chat">
+              {text.jumpToAgent}
+            </a>
+            <button type="button" className="btn-ghost" onClick={onRerun}>
+              {text.rerunAgent}
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => void exportNote()}>
+              {text.saveNote}
+            </button>
           </div>
         </header>
 
@@ -2109,18 +2125,23 @@ function Rail({
         )}
       </section>
 
-      <section className="rail-block agent-chat">
+      <section className="rail-block agent-chat" id="agent-chat">
         <div className="agent-chat-head">
           <p className="label-section">{text.agentChat}</p>
-          <span className={`agent-chat-status is-${chatStatus}`}>
-            {chatStatus === "running"
-              ? text.chatRunning
-              : chatStatus === "completed"
-                ? text.chatCompleted
-                : chatStatus === "failed"
-                  ? text.chatFailed
-                  : text.chatIdle}
-          </span>
+          <div className="agent-chat-head-actions">
+            <a className="btn-link" href="#agent-composer">
+              {text.jumpToChatInput}
+            </a>
+            <span className={`agent-chat-status is-${chatStatus}`}>
+              {chatStatus === "running"
+                ? text.chatRunning
+                : chatStatus === "completed"
+                  ? text.chatCompleted
+                  : chatStatus === "failed"
+                    ? text.chatFailed
+                    : text.chatIdle}
+            </span>
+          </div>
         </div>
         {chat ? (
           <>
@@ -2159,7 +2180,7 @@ function Rail({
         ) : (
           <p className="rail-message muted-soft">{text.chatIdle}</p>
         )}
-        <div className="agent-composer">
+        <div className="agent-composer" id="agent-composer">
           <input
             placeholder={text.askPlaceholder}
             value={question}

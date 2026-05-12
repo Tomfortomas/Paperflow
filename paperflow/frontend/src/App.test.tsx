@@ -350,6 +350,29 @@ describe("Paperflow app", () => {
     expect(screen.getByRole("button", { name: /打开 PDF 阅读器/i })).toBeInTheDocument();
   });
 
+  it("surfaces quick actions for jumping to Agent chat", async () => {
+    const user = userEvent.setup();
+    render(<App initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+
+    expect(screen.getByRole("link", { name: /^Agent$/ })).toHaveAttribute("href", "#agent-chat");
+
+    const reportHead = screen.getByRole("heading", { name: /阅读报告/i }).closest("header") as HTMLElement;
+    expect(within(reportHead).getByRole("link", { name: /跳到 Agent/i })).toHaveAttribute(
+      "href",
+      "#agent-chat",
+    );
+    expect(within(reportHead).getByRole("button", { name: /重新运行 Agent/i })).toBeInTheDocument();
+    expect(
+      within(reportHead).getByRole("button", { name: /保存 \/ 更新 Obsidian 笔记/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /回到输入框/i })).toHaveAttribute(
+      "href",
+      "#agent-composer",
+    );
+  });
+
   it("opens the PDF viewer from an evidence detail click", async () => {
     const user = userEvent.setup();
     render(<App initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
