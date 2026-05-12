@@ -32,6 +32,10 @@ interface PdfViewerProps {
 
 type PdfModule = typeof import("pdfjs-dist");
 type PdfDocument = import("pdfjs-dist").PDFDocumentProxy;
+type PdfRenderTask = {
+  promise: Promise<unknown>;
+  cancel?: () => void;
+};
 
 export function PdfViewer({
   pdfUrl,
@@ -380,6 +384,7 @@ function PdfPage({
   useEffect(() => {
     if (!canvasRef.current) return;
     let cancelled = false;
+    let renderTask: PdfRenderTask | null = null;
 
     (async () => {
       try {
@@ -405,11 +410,14 @@ function PdfPage({
         setRenderedSize({ width: viewport.width, height: viewport.height });
         setRenderedScale(fitScale);
 
-        await pdfPage.render({
+        renderTask = pdfPage.render({
           canvasContext: context,
           viewport,
           transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
-        }).promise;
+        }) as PdfRenderTask;
+        await renderTask.promise;
+        renderTask = null;
+        if (cancelled) return;
 
         const textLayer = textLayerRef.current;
         if (textLayer) {
@@ -417,6 +425,7 @@ function PdfPage({
           textLayer.style.width = `${viewport.width}px`;
           textLayer.style.height = `${viewport.height}px`;
           const textContent = await pdfPage.getTextContent();
+          if (cancelled) return;
           const renderTextLayer = (pdfModule as unknown as {
             renderTextLayer?: (params: Record<string, unknown>) => unknown;
           }).renderTextLayer;
@@ -430,7 +439,7 @@ function PdfPage({
           }
         }
       } catch (caught) {
-        if (!cancelled) {
+        if (!cancelled && !isPdfRenderCancelled(caught)) {
           setError(caught instanceof Error ? caught.message : "Failed to render page");
         }
       }
@@ -438,6 +447,11 @@ function PdfPage({
 
     return () => {
       cancelled = true;
+      try {
+        renderTask?.cancel?.();
+      } catch {
+        // PDF.js can throw if the task has already settled; cleanup should stay silent.
+      }
     };
   }, [containerWidth, maxFitScale, pageNumber, pdfDoc, pdfModule, zoom]);
 
@@ -516,6 +530,14 @@ function scaleForContainer(containerWidth: number, pageWidth: number): number {
 
 function clampPage(value: number, maxPage: number): number {
   return Math.max(1, Math.min(value, Math.max(1, maxPage)));
+}
+
+function isPdfRenderCancelled(value: unknown): boolean {
+  return (
+    value instanceof Error &&
+    (value.name === "RenderingCancelledException" ||
+      value.message.toLowerCase().includes("cancelled"))
+  );
 }
 
 function scrollableExtent(element: HTMLElement): { top: number; left: number } {

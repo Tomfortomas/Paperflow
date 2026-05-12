@@ -11,7 +11,7 @@ const pdfPage = {
     height: 800 * scale,
   }),
   getTextContent: vi.fn(async () => ({ items: [] })),
-  render: vi.fn(() => ({ promise: Promise.resolve() })),
+  render: vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() })),
 };
 
 const pdfDocument = {
@@ -32,6 +32,14 @@ vi.mock("pdfjs-dist/build/pdf.worker.min.mjs?url", () => ({
 
 describe("PdfViewer", () => {
   beforeEach(() => {
+    pdfDocument.numPages = 3;
+    pdfDocument.destroy.mockClear();
+    pdfDocument.getPage.mockReset();
+    pdfDocument.getPage.mockResolvedValue(pdfPage);
+    pdfPage.getTextContent.mockReset();
+    pdfPage.getTextContent.mockResolvedValue({ items: [] });
+    pdfPage.render.mockReset();
+    pdfPage.render.mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() });
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       callback(0);
       return 1;
@@ -116,6 +124,24 @@ describe("PdfViewer", () => {
     expect(screen.getByLabelText(/^PDF zoom$/i)).toHaveValue("fit");
 
     expect(screen.getByRole("button", { name: /Slightly shrink PDF/i })).toBeDisabled();
+  });
+
+  it("cancels an in-flight canvas render before repainting the same page", async () => {
+    const user = userEvent.setup();
+    const firstRender = deferred<void>();
+    const cancelFirstRender = vi.fn(() => firstRender.resolve());
+    pdfDocument.numPages = 1;
+    pdfPage.render.mockReset();
+    pdfPage.render
+      .mockReturnValueOnce({ promise: firstRender.promise, cancel: cancelFirstRender })
+      .mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() });
+
+    render(<PdfViewer pdfUrl="http://127.0.0.1:8000/paper.pdf" page={1} />);
+
+    await waitFor(() => expect(pdfPage.render).toHaveBeenCalledTimes(1));
+    await user.selectOptions(screen.getByLabelText(/^PDF zoom$/i), "150");
+
+    await waitFor(() => expect(cancelFirstRender).toHaveBeenCalledTimes(1));
   });
 
   it("jumps pages by scrolling the explicit viewer container", async () => {
@@ -373,4 +399,14 @@ interface RectInit {
   right: number;
   width: number;
   height: number;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
 }
