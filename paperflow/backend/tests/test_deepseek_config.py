@@ -80,6 +80,8 @@ def test_deepseek_report_prompt_requires_chinese_explanations(monkeypatch) -> No
     assert '"paper_title": string|null' in chunk_prompt
     assert "evidence.quote must be an exact quote" in chunk_prompt
     assert "not the PDF filename" in chunk_prompt
+    assert "Code / Implementation" in chunk_prompt
+    assert "code is open-sourced" in chunk_prompt
     assert "paper_briefing:" in chunk_prompt
     assert any("coordinator" in prompt.lower() for prompt in captured["prompts"])
     assert captured["timeout"].read == 90
@@ -89,6 +91,71 @@ def test_deepseek_report_prompt_requires_chinese_explanations(monkeypatch) -> No
     assert report.agent_run.total_tokens == 504
     assert report.summary[0].text == "本文提出一个带证据的论文阅读工作流。"
     assert report.summary[0].evidence[0].quote == "We introduce an evidence-aware workflow."
+    assert any(section.title == "Code / Implementation" for section in report.sections)
+
+
+def test_deepseek_normalizes_missing_generated_ids(monkeypatch) -> None:
+    def fake_post(url, headers, json, timeout):
+        prompt = json["messages"][1]["content"]
+        if "fast paper briefing" in prompt:
+            content = {"paper_title": "Open Code Paper", "task": "paper reading", "key_terms": []}
+        else:
+            content = {
+                "paper_id": "paper-1",
+                "paper_title": "Open Code Paper",
+                "summary": [
+                    {
+                        "text": "论文明确说明代码已开源。",
+                        "reliability": "R0",
+                        "evidence": [{"page": 1, "quote": "Code is available at https://github.com/acme/base."}],
+                    }
+                ],
+                "sections": [
+                    {
+                        "title": "Code / Implementation",
+                        "claims": [
+                            {
+                                "text": "论文使用 GitHub 上的 acme/base codebase。",
+                                "reliability": "R0",
+                                "evidence": [
+                                    {
+                                        "section": "Implementation",
+                                        "quote": "Code is available at https://github.com/acme/base.",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "related_work": [
+                    {
+                        "title": "Prior Tool",
+                        "relation": "作为开源实现对照。",
+                        "source": "References",
+                        "reliability": "R1",
+                        "evidence": [{"quote": "Prior Tool"}],
+                    }
+                ],
+            }
+        return FakeResponse({"choices": [{"message": {"content": json_dumps(content)}}]})
+
+    monkeypatch.setattr("app.deepseek.httpx.post", fake_post)
+    client = DeepSeekClient(api_key="key")
+
+    report = client.generate_reading_report(
+        paper_id="paper-1",
+        source_name="paper.pdf",
+        paper_text="Code is available at https://github.com/acme/base.",
+    )
+
+    assert report.summary[0].id == "summary-1"
+    assert report.summary[0].evidence[0].id == "summary-1-e1"
+    assert report.summary[0].evidence[0].source == "paper.pdf"
+    assert report.sections[0].id == "section-code-implementation"
+    assert report.sections[0].claims[0].id == "section-code-implementation-claim-1"
+    assert report.sections[0].claims[0].evidence[0].source == "paper.pdf"
+    assert report.related_work[0].id == "rw-prior-tool"
+    assert report.related_work[0].evidence[0].id == "rw-prior-tool-e1"
 
 
 def test_deepseek_pipeline_uses_briefing_and_bounded_parallel_chunk_prompts(monkeypatch) -> None:
@@ -118,6 +185,24 @@ def test_deepseek_pipeline_uses_briefing_and_bounded_parallel_chunk_prompts(monk
     assert all(len(prompt) < 17000 for prompt in chunk_prompts)
     assert any("A" * 1000 in prompt for prompt in chunk_prompts)
     assert any("coordinator" in prompt.lower() for prompt in captured["prompts"])
+
+
+def test_deepseek_progress_formats_input_without_name_error(monkeypatch) -> None:
+    progress = []
+    client = DeepSeekClient(api_key="key")
+
+    monkeypatch.setattr(client, "_generate_paper_briefing", lambda **_: ({}, {}))
+    monkeypatch.setattr(client, "_generate_chunk_report", lambda **kwargs: (_small_report("paper-1", kwargs["source_name"], 0), {}))
+    monkeypatch.setattr(client, "_synthesize_report", lambda **kwargs: (kwargs["draft"], {}))
+
+    client.generate_reading_report(
+        paper_id="paper-1",
+        source_name="paper.pdf",
+        paper_text="A" * 1500,
+        on_progress=progress.append,
+    )
+
+    assert any("input=1.5k chars" in message for message in progress)
 
 
 def test_deepseek_parallel_partial_coverage_tracks_completed_chunks(monkeypatch) -> None:

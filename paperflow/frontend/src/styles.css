@@ -911,7 +911,8 @@ input[type="file"]::file-selector-button:hover {
   justify-content: flex-start;
 }
 .paper-actions .btn-primary,
-.paper-actions .btn-secondary {
+.paper-actions .btn-secondary,
+.paper-actions .btn-ghost {
   min-width: 5.1rem;
   padding-inline: 1.15rem;
   white-space: normal;
@@ -2551,10 +2552,13 @@ input[type="file"]::file-selector-button:hover {
   overflow: hidden;
 }
 .workspace-pdf-pane .pdf-viewer-shell {
+  display: flex;
+  flex-direction: column;
   margin: var(--space-3) 0 0;
   border: 0;
   padding: 0;
   background: transparent;
+  min-height: 0;
 }
 
 @media (min-width: 1280px) {
@@ -2571,18 +2575,21 @@ input[type="file"]::file-selector-button:hover {
   overflow-y: auto;
   padding-bottom: var(--space-1);
   overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
 }
 
 .workspace-pdf-pane .pdf-viewer {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
 @media (min-width: 1280px) {
   .workspace-pdf-pane .pdf-viewer {
     height: 100%;
-    overflow: hidden;
+    overflow: auto;
+    scrollbar-gutter: stable;
   }
 }
 
@@ -2660,7 +2667,6 @@ input[type="file"]::file-selector-button:hover {
   display: grid;
   gap: var(--space-5);
   padding: var(--space-2) 0 var(--space-4);
-  overscroll-behavior: contain;
 }
 
 .workspace-pdf-pane .pdf-viewer-pages {
@@ -2669,10 +2675,7 @@ input[type="file"]::file-selector-button:hover {
 
 @media (min-width: 1280px) {
   .workspace-pdf-pane .pdf-viewer-pages {
-    flex: 1 1 auto;
-    overflow: auto;
     padding-right: var(--space-2);
-    scrollbar-gutter: stable;
   }
 }
 

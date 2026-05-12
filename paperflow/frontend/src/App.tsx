@@ -111,6 +111,8 @@ const UI_TEXT = {
     agentStatus: "Agent 状态",
     noActiveTask: "当前没有任务。",
     rerunAgent: "重新运行 Agent",
+    agentifyPaper: (title: string) => `重新 Agentify 获取 ${title} 的信息`,
+    agentifyPaperAction: "重新 Agentify 获取信息",
     jumpToAgent: "跳到 Agent",
     jumpToChatInput: "回到输入框",
     evidenceDetail: "证据详情",
@@ -287,6 +289,8 @@ const UI_TEXT = {
     agentStatus: "Agent Status",
     noActiveTask: "No active task.",
     rerunAgent: "Re-run Agent",
+    agentifyPaper: (title: string) => `Re-agentify ${title}`,
+    agentifyPaperAction: "Re-agentify",
     jumpToAgent: "Jump to Agent",
     jumpToChatInput: "Back to input",
     evidenceDetail: "Evidence Detail",
@@ -699,14 +703,19 @@ export function App({
   }
 
   async function rerunPaper(paperId: string) {
-    const session = await client.rerunAgent(paperId);
-    updatePaperStatus(paperId, session.status);
-    setReports((current) => {
-      const next = { ...current };
-      delete next[paperId];
-      return next;
-    });
-    void pollPaper(paperId);
+    setError(null);
+    try {
+      const session = await client.rerunAgent(paperId);
+      updatePaperStatus(paperId, session.status);
+      setReports((current) => {
+        const next = { ...current };
+        delete next[paperId];
+        return next;
+      });
+      void pollPaper(paperId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text.importFailed);
+    }
   }
 
   function updatePaperNote(paperId: string, notePath: string) {
@@ -906,6 +915,15 @@ export function App({
                     {pendingDeleteId === paper.id
                       ? text.confirmDeletePaperAction
                       : text.deletePaperAction}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    aria-label={text.agentifyPaper(paper.title)}
+                    disabled={isPaperAgentActive(paper)}
+                    onClick={() => void rerunPaper(paper.id)}
+                  >
+                    {text.agentifyPaperAction}
                   </button>
                   <button
                     type="button"
@@ -1921,9 +1939,15 @@ function PaperProcessingLine({
   const stage = paper.status.stage ?? "unknown";
   const stageLabel = statusLabels[stage] ?? statusLabels.unknown;
   const isActive = stage === "queued" || stage === "processing";
+  const message =
+    stage === "failed"
+      ? locale === "zh"
+        ? "上次 Agentify 失败，可重新获取信息。"
+        : "Last Agentify run failed. Re-agentify to refresh the information."
+      : localizeTaskMessage(paper.status.message, locale);
   return (
     <div className="paper-processing-line">
-      <span>{localizeTaskMessage(paper.status.message, locale)}</span>
+      <span>{message}</span>
       <span className="paper-processing-stage">{stageLabel}</span>
       {isActive ? (
         <span className="paper-progress-track is-active" aria-hidden="true">
@@ -2792,6 +2816,10 @@ function readInitialLocale(): Locale {
     return "zh";
   }
   return window.localStorage.getItem("paperflow-locale") === "en" ? "en" : "zh";
+}
+
+function isPaperAgentActive(paper: Paper) {
+  return ["queued", "processing"].includes(paper.status?.stage ?? "");
 }
 
 function localizeTaskMessage(message: string, locale: Locale) {

@@ -247,7 +247,11 @@ class DeepSeekClient:
             '"source": string, "reliability": "R1|R2", "evidence": [evidence schema]}]\n'
             "}\n"
             "Required sections: Task, Dataset, Benchmark / Metric, Method, Input / Output, "
-            "Compute / Training, Limitations. If evidence is missing, create an R2 claim "
+            "Compute / Training, Code / Implementation, Limitations. In Code / Implementation, "
+            "answer whether the paper explicitly says code is open-sourced and what codebase, "
+            "framework, repository, or implementation base is used. Use R0 only when the paper "
+            "text directly states this; otherwise create an R2 uncertainty claim saying the paper "
+            "does not provide enough evidence. If evidence is missing, create an R2 claim "
             "with uncertainty instead of guessing. Extract paper_title from the paper title "
             "or first-page metadata when available; use the original paper title, not the PDF "
             "filename. If the title is unclear, return null. "
@@ -263,8 +267,7 @@ class DeepSeekClient:
             prompt,
             system="You are a strict JSON paper-reading agent. Return JSON only.",
         )
-        data["paper_id"] = paper_id
-        self._fill_missing_sources(data, source_name)
+        self._normalize_report_payload(data, paper_id=paper_id, source_name=source_name)
         report = ReadingReport.model_validate(data)
         return report, usage
 
@@ -282,6 +285,10 @@ class DeepSeekClient:
             "Merge parallel chunk reports into one non-redundant, globally consistent reading report. "
             "Deduplicate overlapping claims, preserve exact evidence quotes, keep R0/R1/R2 labels conservative, "
             "and repair gaps when a required section is missing by adding an R2 uncertainty claim rather than guessing. "
+            "Required sections include Task, Dataset, Benchmark / Metric, Method, Input / Output, "
+            "Compute / Training, Code / Implementation, and Limitations. The Code / Implementation section must "
+            "answer whether code is open-sourced and what codebase/framework/repository is used when the paper "
+            "directly states it; otherwise keep it as an R2 uncertainty claim. "
             "Return strict JSON using the same ReadingReport schema as chunk reports.\n\n"
             f"paper_id: {paper_id}\n"
             f"source_name: {source_name}\n"
@@ -292,8 +299,12 @@ class DeepSeekClient:
             prompt,
             system="You are a strict JSON coordinator. Return JSON only.",
         )
-        data["paper_id"] = paper_id
-        self._fill_missing_sources(data, source_name)
+        self._normalize_report_payload(
+            data,
+            paper_id=paper_id,
+            source_name=source_name,
+            ensure_code_section=True,
+        )
         return ReadingReport.model_validate(data), usage
 
     def _post_json(self, prompt: str, *, system: str) -> tuple[dict, dict]:
@@ -332,18 +343,44 @@ class DeepSeekClient:
             raise last_error
         raise RuntimeError("DeepSeek request failed without a response")
 
-    def _fill_missing_sources(self, data: dict, source_name: str) -> None:
-        for claim in data.get("summary", []):
-            self._fill_claim_sources(claim, source_name)
-        for section in data.get("sections", []):
-            for claim in section.get("claims", []):
-                self._fill_claim_sources(claim, source_name)
-        for item in data.get("related_work", []):
-            for evidence in item.get("evidence", []):
+    def _normalize_report_payload(
+        self,
+        data: dict,
+        *,
+        paper_id: str,
+        source_name: str,
+        ensure_code_section: bool = False,
+    ) -> None:
+        data["paper_id"] = paper_id
+        data["summary"] = data.get("summary") or []
+        data["sections"] = data.get("sections") or []
+        data["related_work"] = data.get("related_work") or []
+        if ensure_code_section:
+            _ensure_code_section(data)
+        for index, claim in enumerate(data.get("summary", []), start=1):
+            claim.setdefault("id", f"summary-{index}")
+            self._fill_claim_sources(claim, source_name, prefix=f"summary-{index}")
+        for section_index, section in enumerate(data.get("sections", []), start=1):
+            section_title = section.get("title") or f"Section {section_index}"
+            section["title"] = section_title
+            section.setdefault("id", _slug_id("section", section_title, section_index))
+            section["claims"] = section.get("claims") or []
+            for claim_index, claim in enumerate(section.get("claims", []), start=1):
+                claim.setdefault("id", f"{section['id']}-claim-{claim_index}")
+                self._fill_claim_sources(claim, source_name, prefix=f"{section['id']}-{claim_index}")
+        for index, item in enumerate(data.get("related_work", []), start=1):
+            title = item.get("title") or f"Related work {index}"
+            item["title"] = title
+            item.setdefault("id", _slug_id("rw", title, index))
+            item["evidence"] = item.get("evidence") or []
+            for evidence_index, evidence in enumerate(item.get("evidence", []), start=1):
+                evidence.setdefault("id", f"{item['id']}-e{evidence_index}")
                 evidence.setdefault("source", source_name)
 
-    def _fill_claim_sources(self, claim: dict, source_name: str) -> None:
-        for evidence in claim.get("evidence", []):
+    def _fill_claim_sources(self, claim: dict, source_name: str, *, prefix: str) -> None:
+        claim["evidence"] = claim.get("evidence") or []
+        for index, evidence in enumerate(claim.get("evidence", []), start=1):
+            evidence.setdefault("id", f"{prefix}-e{index}")
             evidence.setdefault("source", source_name)
 
     def _legacy_generate_reading_report(
@@ -438,7 +475,11 @@ class DeepSeekClient:
             '"source": string, "reliability": "R1|R2", "evidence": [evidence schema]}]\n'
             "}\n"
             "Required sections: Task, Dataset, Benchmark / Metric, Method, Input / Output, "
-            "Compute / Training, Limitations. If evidence is missing, create an R2 claim "
+            "Compute / Training, Code / Implementation, Limitations. In Code / Implementation, "
+            "answer whether the paper explicitly says code is open-sourced and what codebase, "
+            "framework, repository, or implementation base is used. Use R0 only when the paper "
+            "text directly states this; otherwise create an R2 uncertainty claim saying the paper "
+            "does not provide enough evidence. If evidence is missing, create an R2 claim "
             "with uncertainty instead of guessing. Extract paper_title from the paper title "
             "or first-page metadata when available; use the original paper title, not the PDF "
             "filename. If the title is unclear, return null. "
@@ -470,8 +511,7 @@ class DeepSeekClient:
         response_payload = response.json()
         content = response_payload["choices"][0]["message"]["content"]
         data = json.loads(content)
-        data["paper_id"] = paper_id
-        self._fill_missing_sources(data, source_name)
+        self._normalize_report_payload(data, paper_id=paper_id, source_name=source_name)
         report = ReadingReport.model_validate(data)
         return report, response_payload.get("usage") or {}
 
@@ -509,6 +549,39 @@ def _split_paper_text(paper_text: str) -> list[str]:
         chunks.append("\n\n".join(current))
 
     return chunks or [paper_text[:REPORT_TEXT_BUDGET]]
+
+
+def _format_char_count(value: int) -> str:
+    if value >= 1000:
+        return f"{value / 1000:.1f}k"
+    return str(value)
+
+
+def _slug_id(prefix: str, value: str, index: int) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return f"{prefix}-{slug or index}"
+
+
+def _ensure_code_section(data: dict) -> None:
+    sections = data.get("sections") or []
+    data["sections"] = sections
+    if any((section.get("title") or "").strip() == "Code / Implementation" for section in sections):
+        return
+    sections.append(
+        {
+            "id": "section-code-implementation",
+            "title": "Code / Implementation",
+            "claims": [
+                {
+                    "id": "section-code-implementation-claim-1",
+                    "text": "论文文本中未找到明确的代码开源状态或所用 codebase 说明。",
+                    "reliability": "R2",
+                    "evidence": [],
+                    "uncertainty": "需要检查论文正文、附录或项目页中的代码链接后确认。",
+                }
+            ],
+        }
+    )
 
 
 def _high_signal_text(paper_text: str) -> str:

@@ -295,6 +295,8 @@ PaperFlow/
 ├── index.html
 ├── LICENSE
 ├── assets/
+│   ├── README.html                       ← GitHub Pages-friendly README
+│   ├── favicon.svg
 │   └── paperflow_banner.png
 ├── design_docs/                         ← local design / PRD notes
 └── paperflow/
@@ -359,6 +361,7 @@ Copyright © 2026 shiml20 and Paperflow contributors.
 - Agent integration is built against the DeepSeek API and reuses configuration written by the DeepSeek-TUI CLI when present.
 - PDF parsing is powered by [PyMuPDF](https://github.com/pymupdf/PyMuPDF).
 - The frontend is built with [Vite](https://vitejs.dev/) and [React](https://react.dev/).
+- The prompt design was inspired by Peng Sida's open research-learning notes, [pengsida/learning_research](https://github.com/pengsida/learning_research).
 
 If Paperflow is useful to your research workflow, a star is the kindest signal.
 

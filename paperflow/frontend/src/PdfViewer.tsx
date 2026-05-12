@@ -9,7 +9,6 @@
 
 import {
   type FormEvent,
-  type WheelEvent as ReactWheelEvent,
   useEffect,
   useMemo,
   useRef,
@@ -44,8 +43,12 @@ export function PdfViewer({
   onPageChange,
 }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
   const pagesRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef(new Map<number, HTMLElement>());
+  const observedPageRef = useRef(page);
+  const scrollRafRef = useRef<number | null>(null);
+  const skipNextPageScrollRef = useRef<number | null>(null);
   const [pdfModule, setPdfModule] = useState<PdfModule | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PdfDocument | null>(null);
   const [numPages, setNumPages] = useState(0);
@@ -119,20 +122,81 @@ export function PdfViewer({
   }, [safePage]);
 
   useEffect(() => {
+    if (skipNextPageScrollRef.current === safePage) {
+      skipNextPageScrollRef.current = null;
+      observedPageRef.current = safePage;
+      return;
+    }
+    observedPageRef.current = safePage;
     scrollToPage(safePage, "auto");
   }, [safePage, numPages, zoom]);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+      }
+      scrollRafRef.current = window.requestAnimationFrame(() => {
+        scrollRafRef.current = null;
+        const visiblePage = getVisiblePage(
+          container,
+          pageRefs.current,
+          toolbarRef.current?.offsetHeight ?? 0,
+        );
+        if (!visiblePage || visiblePage === observedPageRef.current) {
+          return;
+        }
+        observedPageRef.current = visiblePage;
+        skipNextPageScrollRef.current = visiblePage;
+        setPageInput(String(visiblePage));
+        onPageChange?.(visiblePage);
+      });
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
+  }, [onPageChange, numPages]);
+
   function scrollToPage(targetPage: number, behavior: ScrollBehavior = "smooth") {
+    const container = containerRef.current;
     const element = pageRefs.current.get(targetPage);
-    if (!element) return;
+    if (!container || !element) return;
     window.requestAnimationFrame(() => {
-      element.scrollIntoView({ block: "start", inline: "center", behavior });
+      scrollElementIntoContainer(container, element, {
+        behavior,
+        block: "start",
+        inline: "center",
+        topOffset: (toolbarRef.current?.offsetHeight ?? 0) + 8,
+      });
+    });
+  }
+
+  function scrollToHighlight(element: HTMLElement) {
+    const container = containerRef.current;
+    if (!container) return;
+    window.requestAnimationFrame(() => {
+      scrollElementIntoContainer(container, element, {
+        behavior: "smooth",
+        block: "center",
+        inline: "center",
+      });
     });
   }
 
   function goToPage(targetPage: number) {
     const nextPage = clampPage(targetPage, numPages || targetPage);
     setPageInput(String(nextPage));
+    observedPageRef.current = nextPage;
+    skipNextPageScrollRef.current = nextPage;
     onPageChange?.(nextPage);
     scrollToPage(nextPage);
   }
@@ -147,40 +211,9 @@ export function PdfViewer({
     goToPage(parsed);
   }
 
-  function handleWheel(event: ReactWheelEvent<HTMLDivElement>) {
-    const scroller = pagesRef.current;
-    if (!scroller) return;
-
-    const target = event.target;
-    if (target instanceof HTMLElement && target.closest("input, select, textarea")) {
-      return;
-    }
-
-    const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    const maxLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-    if (maxTop === 0 && maxLeft === 0) return;
-
-    const nextTop = clampScroll(
-      scroller.scrollTop + normalizeWheelDelta(event.deltaY, event.deltaMode, scroller.clientHeight),
-      maxTop,
-    );
-    const nextLeft = clampScroll(
-      scroller.scrollLeft + normalizeWheelDelta(event.deltaX, event.deltaMode, scroller.clientWidth),
-      maxLeft,
-    );
-
-    if (nextTop === scroller.scrollTop && nextLeft === scroller.scrollLeft) {
-      return;
-    }
-
-    event.preventDefault();
-    scroller.scrollTop = nextTop;
-    scroller.scrollLeft = nextLeft;
-  }
-
   return (
-    <div className="pdf-viewer" ref={containerRef} onWheel={handleWheel}>
-      <div className="pdf-viewer-toolbar">
+    <div className="pdf-viewer" ref={containerRef}>
+      <div className="pdf-viewer-toolbar" ref={toolbarRef}>
         <button
           type="button"
           onClick={() => goToPage(safePage - 1)}
@@ -248,6 +281,7 @@ export function PdfViewer({
                 pageSizes={pageSizes}
                 pdfDoc={pdfDoc}
                 pdfModule={pdfModule}
+                onHighlightElement={scrollToHighlight}
                 zoom={zoom}
               />
             ))
@@ -262,6 +296,7 @@ function PdfPage({
   highlight,
   maxFitScale,
   onPageElement,
+  onHighlightElement,
   onSelection,
   pageNumber,
   pageSizes,
@@ -273,6 +308,7 @@ function PdfPage({
   highlight?: PdfBboxHighlight | null;
   maxFitScale: number;
   onPageElement: (element: HTMLElement | null) => void;
+  onHighlightElement: (element: HTMLElement) => void;
   onSelection?: (quote: string, page: number) => void;
   pageNumber: number;
   pageSizes?: number[][];
@@ -374,10 +410,8 @@ function PdfPage({
 
   useEffect(() => {
     if (!highlightStyle || !highlightRef.current) return;
-    window.requestAnimationFrame(() => {
-      highlightRef.current?.scrollIntoView({ block: "center", inline: "center" });
-    });
-  }, [highlightStyle]);
+    onHighlightElement(highlightRef.current);
+  }, [highlightStyle, onHighlightElement]);
 
   function handleMouseUp() {
     if (!onSelection) return;
@@ -419,18 +453,88 @@ function clampPage(value: number, maxPage: number): number {
   return Math.max(1, Math.min(value, Math.max(1, maxPage)));
 }
 
+function scrollableExtent(element: HTMLElement): { top: number; left: number } {
+  return {
+    top: Math.max(0, element.scrollHeight - element.clientHeight),
+    left: Math.max(0, element.scrollWidth - element.clientWidth),
+  };
+}
+
 function clampScroll(value: number, maxValue: number): number {
   return Math.max(0, Math.min(value, maxValue));
 }
 
-function normalizeWheelDelta(delta: number, deltaMode: number, pageSize: number): number {
-  if (deltaMode === 1) {
-    return delta * 16;
+function scrollElementIntoContainer(
+  container: HTMLElement,
+  element: HTMLElement,
+  {
+    behavior,
+    block,
+    inline,
+    topOffset = 0,
+  }: {
+    behavior: ScrollBehavior;
+    block: "start" | "center";
+    inline: "center";
+    topOffset?: number;
+  },
+) {
+  const containerRect = container.getBoundingClientRect();
+  const elementRect = element.getBoundingClientRect();
+  const extent = scrollableExtent(container);
+  let top = container.scrollTop + elementRect.top - containerRect.top;
+  if (block === "center") {
+    top -= (container.clientHeight - elementRect.height) / 2;
+  } else {
+    top -= topOffset;
   }
-  if (deltaMode === 2) {
-    return delta * pageSize;
+  const left =
+    container.scrollLeft +
+    elementRect.left -
+    containerRect.left -
+    (container.clientWidth - elementRect.width) / 2;
+
+  scrollContainerTo(container, {
+    top: clampScroll(top, extent.top),
+    left: clampScroll(left, extent.left),
+    behavior,
+  });
+}
+
+function scrollContainerTo(
+  container: HTMLElement,
+  options: { top: number; left: number; behavior: ScrollBehavior },
+) {
+  if (typeof container.scrollTo === "function") {
+    container.scrollTo(options);
+    return;
   }
-  return delta;
+  container.scrollTop = options.top;
+  container.scrollLeft = options.left;
+}
+
+function getVisiblePage(
+  container: HTMLElement,
+  pageRefs: Map<number, HTMLElement>,
+  toolbarHeight: number,
+): number | null {
+  const containerRect = container.getBoundingClientRect();
+  const readingLine = containerRect.top + toolbarHeight + 12;
+  const entries = Array.from(pageRefs.entries()).sort(([a], [b]) => a - b);
+  let closest: { page: number; distance: number } | null = null;
+
+  for (const [pageNumber, element] of entries) {
+    const rect = element.getBoundingClientRect();
+    if (rect.bottom >= readingLine && rect.top <= containerRect.bottom) {
+      return pageNumber;
+    }
+    const distance = Math.abs(rect.top - readingLine);
+    if (!closest || distance < closest.distance) {
+      closest = { page: pageNumber, distance };
+    }
+  }
+
+  return closest?.page ?? null;
 }
 
 function effectivePageBbox(

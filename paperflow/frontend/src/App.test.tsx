@@ -92,6 +92,9 @@ describe("Paperflow app", () => {
     expect(screen.getByRole("button", { name: /打开 paperflow/i })).toHaveTextContent(/^打开$/);
     expect(screen.getByRole("button", { name: /删除 paperflow/i })).toHaveTextContent(/^删除$/);
     expect(screen.getByRole("button", { name: /删除 paperflow/i })).toHaveClass("btn-secondary");
+    expect(
+      screen.getByRole("button", { name: /重新 Agentify 获取 paperflow 的信息/i }),
+    ).toHaveTextContent(/重新 Agentify 获取信息/);
   });
 
   it("shows subtle parse metrics in the report header", async () => {
@@ -248,6 +251,35 @@ describe("Paperflow app", () => {
     expect(client.deletePaper).toHaveBeenCalledWith("paper-1");
     expect(screen.queryByRole("heading", { level: 3, name: "Paperflow" })).not.toBeInTheDocument();
     expect(screen.getByText(/文献库还是空的/)).toBeInTheDocument();
+  });
+
+  it("re-agentifies a paper from the home list and hides noisy failed output", async () => {
+    const user = userEvent.setup();
+    const failedPaper: Paper = {
+      ...paper,
+      status: {
+        stage: "failed",
+        message:
+          "15 validation errors for ReadingReport sections.0.id Field required related_work.0.id Field required",
+        progress: 1,
+      },
+    };
+    const client = fakeClient({
+      rerunAgent: vi.fn().mockResolvedValue({
+        status: { stage: "queued", message: "Paper queued for processing", progress: 0 },
+      }),
+      getStatus: vi.fn().mockImplementation(() => new Promise(() => {})),
+    });
+
+    render(<App client={client} initialPapers={[failedPaper]} initialReports={{ "paper-1": report }} />);
+
+    expect(screen.getByText(/上次 Agentify 失败，可重新获取信息/)).toBeInTheDocument();
+    expect(screen.queryByText(/validation errors for ReadingReport/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /重新 Agentify 获取 paperflow 的信息/i }));
+
+    expect(client.rerunAgent).toHaveBeenCalledWith("paper-1");
+    expect(screen.getByRole("button", { name: /重新 Agentify 获取 paperflow 的信息/i })).toBeDisabled();
   });
 
   it("toggles the interface between Chinese and English", async () => {

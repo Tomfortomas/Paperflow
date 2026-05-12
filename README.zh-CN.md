@@ -295,6 +295,8 @@ PaperFlow/
 ├── index.html
 ├── LICENSE
 ├── assets/
+│   ├── README.html                       ← GitHub Pages 友好的 README 页面
+│   ├── favicon.svg
 │   └── paperflow_banner.png
 ├── design_docs/                         ← 本地设计 / PRD 笔记
 └── paperflow/
@@ -359,6 +361,7 @@ Copyright © 2026 shiml20 and Paperflow contributors.
 - Agent integration 基于 DeepSeek API，并可复用 DeepSeek-TUI CLI 写入的配置。
 - PDF parsing 基于 [PyMuPDF](https://github.com/pymupdf/PyMuPDF)。
 - 前端基于 [Vite](https://vitejs.dev/) 和 [React](https://react.dev/)。
+- Prompt 设计受到彭思达开源科研经验文档 [pengsida/learning_research](https://github.com/pengsida/learning_research) 的启发。
 
 如果 Paperflow 对你的研究流程有帮助，欢迎 star。
 
