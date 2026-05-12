@@ -1431,14 +1431,14 @@ input[type="file"]::file-selector-button:hover {
     row-gap: var(--space-8);
     --workspace-visible-width: min(
       var(--workspace-track-width),
-      calc(100vw - var(--space-7) * 2)
+      calc(100vw - var(--space-4) * 2)
     );
     max-width: var(--workspace-visible-width);
     margin-left: max(
-      var(--space-5),
+      var(--space-4),
       calc((100vw - var(--workspace-visible-width)) / 2 - clamp(120px, 10vw, 260px))
     );
-    padding: var(--space-7) var(--space-8) var(--space-9);
+    padding: var(--space-7) var(--space-5) var(--space-9);
   }
 }
 
