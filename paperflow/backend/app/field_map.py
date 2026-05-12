@@ -234,6 +234,13 @@ def _relationship_graph(
                     source=source,
                     target=target,
                     relation="precedes",
+                    source_type="agent_suggested",
+                    rationale=(
+                        f"Paperflow Agent enrichment marks '{node.title}' as a "
+                        f"{node.role} because R1 search labeled it as {node.role} context."
+                    ),
+                    evidence=[],
+                    confidence=0.68 if node.role == "predecessor" else 0.62,
                 )
             )
 

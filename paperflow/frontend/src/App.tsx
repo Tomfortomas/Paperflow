@@ -146,6 +146,8 @@ const UI_TEXT = {
     fieldMapGraphPredecessor: "前置基础",
     fieldMapGraphSeed: "Seed",
     fieldMapGraphSuccessor: "后续影响",
+    fieldMapAgentSuggested: "Agent 建议关系",
+    fieldMapRuleSuggested: "规则来源关系",
     fieldMapOpenProblems: "未解决问题",
     fieldMapRecentTrends: "近期趋势 (R2)",
     fieldMapOpportunities: "研究机会 (R2)",
@@ -173,6 +175,10 @@ const UI_TEXT = {
       "Queued for Agent parsing": "已加入 Agent 解析队列",
       "PaperAgent is preparing PDF text and report context":
         "正在准备 PDF 文本和 Agent 上下文。",
+      "DeepSeek report received; locating evidence":
+        "DeepSeek 已返回报告，正在定位证据。",
+      "Evidence locations resolved; saving report":
+        "证据位置已解析，正在保存报告。",
       "DeepSeek PaperAgent is parsing the PDF":
         "DeepSeek PaperAgent 正在解析 PDF",
       "DeepSeek report generation timed out. The PDF may be long or the model may be slow; retry later or increase DEEPSEEK_REPORT_READ_TIMEOUT.":
@@ -314,6 +320,8 @@ const UI_TEXT = {
     fieldMapGraphPredecessor: "Predecessors",
     fieldMapGraphSeed: "Seed",
     fieldMapGraphSuccessor: "Successors",
+    fieldMapAgentSuggested: "Agent-suggested relation",
+    fieldMapRuleSuggested: "Rule-derived relation",
     fieldMapOpenProblems: "Open Problems",
     fieldMapRecentTrends: "Recent Trends (R2)",
     fieldMapOpportunities: "Research Opportunities (R2)",
@@ -633,6 +641,17 @@ export function App({
           title: report.paper_title ?? papers.find((paper) => paper.id === paperId)?.title,
         });
         return;
+      }
+      if (nextStatus.stage === "processing") {
+        try {
+          const partialReport = await client.getReport(paperId);
+          setReports((current) => ({ ...current, [paperId]: partialReport }));
+          if (partialReport.paper_title) {
+            updatePaperTitle(paperId, partialReport.paper_title);
+          }
+        } catch {
+          // A partial report appears only after the first chunk finishes.
+        }
       }
       if (nextStatus.stage === "failed") {
         showImportFailure(
@@ -1018,6 +1037,9 @@ function Workspace({
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(
     report?.summary[0] ?? null,
   );
+  const [activeEvidence, setActiveEvidence] = useState<Evidence | null>(
+    report?.summary[0]?.evidence?.[0] ?? null,
+  );
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [pdfPage, setPdfPage] = useState(1);
   const [r1Running, setR1Running] = useState(false);
@@ -1039,6 +1061,25 @@ function Workspace({
     }
   }, [report, selectedClaim]);
 
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .listChats(paper.id)
+      .then((chats) => {
+        if (!cancelled && chats.length > 0) {
+          const latest = chats[0];
+          setChat(latest);
+          setChatStatus(latest.status === "failed" ? "failed" : "completed");
+        }
+      })
+      .catch(() => {
+        /* Chat history is optional for older backends. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, paper.id]);
+
   // When the user selects a claim, jump the PDF viewer to the first evidence
   // page so the highlight is immediately visible.
   useEffect(() => {
@@ -1046,13 +1087,22 @@ function Workspace({
     if (firstEvidence?.page) {
       setPdfPage(firstEvidence.page);
     }
+    setActiveEvidence(firstEvidence ?? null);
   }, [selectedClaim]);
 
   const highlight: PdfBboxHighlight | null = (() => {
-    const first = selectedClaim?.evidence?.[0];
+    const first = activeEvidence ?? selectedClaim?.evidence?.[0];
     if (!first?.page || !first.bbox) return null;
     return { page: first.page, bbox: first.bbox };
   })();
+
+  function openEvidenceInPdf(evidence: Evidence) {
+    setActiveEvidence(evidence);
+    if (evidence.page) {
+      setPdfPage(evidence.page);
+    }
+    setPdfViewerOpen(true);
+  }
 
   async function askAgentChat() {
     if (!question.trim()) {
@@ -1071,6 +1121,7 @@ function Workspace({
         { id: "locate-evidence", label: "Locate evidence", status: "pending" },
         { id: "check-r1", label: "Check R1 context", status: "pending" },
         { id: "compose-answer", label: "Compose answer", status: "pending" },
+        { id: "persist-transcript", label: "Persist transcript", status: "pending" },
       ],
       messages: [{ id: `user-${Date.now()}`, role: "user", content: userQuestion }],
       answer: {
@@ -1080,15 +1131,51 @@ function Workspace({
         evidence: [],
       },
     });
+    const payload = {
+      question: userQuestion,
+      selected_claim_id: selectedClaim?.id ?? null,
+      selected_evidence_id: firstEvidence?.id ?? null,
+      page: firstEvidence?.page ?? null,
+      quote: firstEvidence?.quote ?? null,
+      section: firstEvidence?.section ?? null,
+    };
     try {
-      const result = await client.chatPaper(paper.id, {
-        question: userQuestion,
-        selected_claim_id: selectedClaim?.id ?? null,
-        selected_evidence_id: firstEvidence?.id ?? null,
-        page: firstEvidence?.page ?? null,
-        quote: firstEvidence?.quote ?? null,
-        section: firstEvidence?.section ?? null,
+      let result: PaperChatResponse | null = null;
+      await client.streamChatPaper(paper.id, payload, ({ event, data }) => {
+        if (event === "step" && data && typeof data === "object") {
+          const nextStep = data as PaperChatResponse["steps"][number];
+          setChat((current) =>
+            current
+              ? {
+                  ...current,
+                  steps: current.steps.map((step) =>
+                    step.id === nextStep.id ? { ...step, ...nextStep } : step,
+                  ),
+                }
+              : current,
+          );
+        }
+        if (event === "delta" && data && typeof data === "object") {
+          const text = String((data as { text?: string }).text ?? "");
+          setChat((current) =>
+            current
+              ? {
+                  ...current,
+                  messages: [
+                    ...current.messages.filter((message) => message.id !== "stream-assistant"),
+                    { id: "stream-assistant", role: "assistant", content: text },
+                  ],
+                }
+              : current,
+          );
+        }
+        if (event === "final" && data && typeof data === "object") {
+          result = (data as { chat_response?: PaperChatResponse }).chat_response ?? null;
+        }
       });
+      if (result === null) {
+        result = await client.chatPaper(paper.id, payload);
+      }
       setChat(result);
       setChatStatus("completed");
     } catch {
@@ -1216,6 +1303,7 @@ function Workspace({
           onAgentConfigSave={onAgentConfigSave}
           onAsk={askAgentChat}
           onExport={exportNote}
+          onEvidenceOpen={openEvidenceInPdf}
           onQuestionChange={setQuestion}
           onRerun={onRerun}
           paper={paper}
@@ -1246,7 +1334,10 @@ function Workspace({
           <h2 className="eyebrow">{text.readingReport}</h2>
           <h1>{displayTitle}</h1>
           <p className="path-line">{paper.pdf_path}</p>
-          <ReportRunMetrics report={report} />
+          <ReportRunMetrics isLive={!isReportReady} report={report} />
+          {!isReportReady ? (
+            <p className="report-run-metrics">报告仍在动态生成中</p>
+          ) : null}
           <div className="report-head-tools">
             <StatusBadge locale={locale} status={paper.status} />
             {isReportReady ? (
@@ -1382,6 +1473,7 @@ function Workspace({
         onAgentConfigSave={onAgentConfigSave}
         onAsk={askAgentChat}
         onExport={exportNote}
+        onEvidenceOpen={openEvidenceInPdf}
         onQuestionChange={setQuestion}
         onRerun={onRerun}
         paper={paper}
@@ -1443,6 +1535,8 @@ function AgentParseTrace({ locale, paper }: { locale: Locale; paper: Paper }) {
           failed: "失败点",
           receivedDetail: "PDF / 元数据已进入本地任务队列。",
           prepareDetail: "正在抽取可读文本、构造 Reading Report 上下文。",
+          deepSeekPrepareDetail: (coverage: string) =>
+            `文本已抽取；请求已组装。${coverage}。`,
           modelDetail: "模型需要返回结构化 JSON、R0/R1/R2 和证据。",
           persistDetail: "报告生成后会落盘，并尝试定位 evidence 页码与位置。",
         }
@@ -1459,9 +1553,15 @@ function AgentParseTrace({ locale, paper }: { locale: Locale; paper: Paper }) {
           failed: "failed here",
           receivedDetail: "PDF / metadata entered the local task queue.",
           prepareDetail: "Extracting readable text and report context.",
+          deepSeekPrepareDetail: (coverage: string) =>
+            `Text extracted; DeepSeek report request prepared. ${coverage}.`,
           modelDetail: "The model must return structured JSON, R0/R1/R2, and evidence.",
           persistDetail: "The report is saved and evidence locations are resolved after generation.",
         };
+  const deepSeekProgress = parseDeepSeekProgressMessage(status.message);
+  const inputCoverage = deepSeekProgress
+    ? formatDeepSeekInputCoverage(deepSeekProgress.input, locale)
+    : null;
   const steps = [
     {
       id: "received",
@@ -1472,13 +1572,18 @@ function AgentParseTrace({ locale, paper }: { locale: Locale; paper: Paper }) {
     {
       id: "prepare",
       title: labels.prepare,
-      detail: labels.prepareDetail,
+      detail: inputCoverage
+        ? labels.deepSeekPrepareDetail(inputCoverage)
+        : labels.prepareDetail,
       state: isQueued ? "running" : "completed",
     },
     {
       id: "model",
       title: labels.model,
-      detail: isFailed ? localizeTaskMessage(status.message, locale) : labels.modelDetail,
+      detail:
+        isFailed || (isProcessing && deepSeekProgress)
+          ? localizeTaskMessage(status.message, locale)
+          : labels.modelDetail,
       state: isFailed ? "failed" : isProcessing ? "running" : "pending",
     },
     {
@@ -1518,17 +1623,47 @@ function AgentParseTrace({ locale, paper }: { locale: Locale; paper: Paper }) {
   );
 }
 
-function ReportRunMetrics({ report }: { report: ReadingReport }) {
+export function ReportRunMetrics({
+  isLive = false,
+  report,
+}: {
+  isLive?: boolean;
+  report: ReadingReport;
+}) {
   const metrics = report.agent_run;
-  if (!metrics?.elapsed_seconds && !metrics?.total_tokens) {
+  const baseElapsed = metrics?.elapsed_seconds ?? 0;
+  const [liveElapsed, setLiveElapsed] = useState(baseElapsed);
+  useEffect(() => {
+    setLiveElapsed(baseElapsed);
+    if (!isLive || !metrics?.elapsed_seconds) {
+      return;
+    }
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setLiveElapsed(baseElapsed + (Date.now() - startedAt) / 1000);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [baseElapsed, isLive, metrics?.elapsed_seconds]);
+  if (
+    !metrics?.elapsed_seconds &&
+    !metrics?.total_tokens &&
+    !metrics?.coverage_percent &&
+    !metrics?.chunks_processed
+  ) {
     return null;
   }
   const bits = [];
+  if (metrics.coverage_percent != null) {
+    bits.push(`覆盖全文 ${Math.round(metrics.coverage_percent * 100)}%`);
+  }
+  if (metrics.chunks_processed && metrics.chunks_processed > 1) {
+    bits.push(`${metrics.chunks_processed} chunks`);
+  }
   if (metrics.total_tokens) {
     bits.push(`${formatTokenCount(metrics.total_tokens)} tokens`);
   }
   if (metrics.elapsed_seconds) {
-    bits.push(`${formatDuration(metrics.elapsed_seconds)}`);
+    bits.push(`${formatDuration(liveElapsed)}`);
   }
   if (bits.length === 0) {
     return null;
@@ -1574,7 +1709,7 @@ function AgentConfigPanel({
   const modelOptions = Array.isArray(config.model_options) ? config.model_options : [];
   const modelValue = String(draft.model ?? config.model ?? "");
   const apiKeyValue = String(draft.api_key ?? "");
-  const timeoutValue = String(draft.report_read_timeout ?? config.report_read_timeout ?? 45);
+  const timeoutValue = String(draft.report_read_timeout ?? config.report_read_timeout ?? 90);
   const modelChoices = Array.from(new Set([modelValue, ...modelOptions].filter(Boolean)));
   const timeoutChoices = [45, 90, 120, 180];
   const messageKind =
@@ -1807,6 +1942,7 @@ function Rail({
   onAgentConfigSave,
   onAsk,
   onExport,
+  onEvidenceOpen,
   onQuestionChange,
   onRerun,
   paper,
@@ -1824,6 +1960,7 @@ function Rail({
   onAgentConfigSave: () => void;
   onAsk: () => Promise<void>;
   onExport: () => Promise<void>;
+  onEvidenceOpen: (evidence: Evidence) => void;
   onQuestionChange: (question: string) => void;
   onRerun: () => void;
   paper: Paper;
@@ -1877,6 +2014,15 @@ function Rail({
                       {evidence.section ? <span>{evidence.section}</span> : null}
                       <LocationGlyph evidence={evidence} locale={locale} />
                     </p>
+                    {evidence.page ? (
+                      <button
+                        type="button"
+                        className="btn-link evidence-open"
+                        onClick={() => onEvidenceOpen(evidence)}
+                      >
+                        {locale === "zh" ? "在 PDF 中查看" : "Open in PDF"}
+                      </button>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -2393,6 +2539,22 @@ function RelationshipGraph({
             <RelationshipNodeRow key={node.id} node={node} />
           ))}
         </ol>
+        <ol className="relationship-edge-list">
+          {graph.edges.slice(0, 8).map((edge) => (
+            <li key={edge.id}>
+              <span className={`badge ${edge.source_type === "agent_suggested" ? "r1" : "r2"}`}>
+                {edge.source_type === "agent_suggested"
+                  ? text.fieldMapAgentSuggested
+                  : text.fieldMapRuleSuggested}
+              </span>
+              <span>{edge.relation}</span>
+              {edge.confidence != null ? (
+                <span className="mono">{Math.round(edge.confidence * 100)}%</span>
+              ) : null}
+              {edge.rationale ? <p>{edge.rationale}</p> : null}
+            </li>
+          ))}
+        </ol>
       </div>
     </article>
   );
@@ -2543,7 +2705,96 @@ function localizeTaskMessage(message: string, locale: Locale) {
   if (locale === "zh" && message.startsWith("Agent not configured")) {
     return "Agent 未配置。请设置 DEEPSEEK_API_KEY 或 ~/.deepseek/config.toml。";
   }
+  const partialProgress = parsePartialReportProgressMessage(message);
+  if (partialProgress) {
+    return locale === "zh"
+      ? `首批关键信息已生成：覆盖全文 ${partialProgress.coverage}，${partialProgress.chunks} 个 chunk；报告仍在动态补全。`
+      : `First key findings are available: ${partialProgress.coverage} coverage, ${partialProgress.chunks} chunk(s); the report is still updating.`;
+  }
+  const pdfProgress = parsePdfProgressMessage(message);
+  if (pdfProgress) {
+    return locale === "zh"
+      ? `PDF 文本已抽取：${formatExtractedTextSize(pdfProgress.input, locale)}。`
+      : `PDF text extracted: ${formatExtractedTextSize(pdfProgress.input, locale)}.`;
+  }
+  const deepSeekProgress = parseDeepSeekProgressMessage(message);
+  if (deepSeekProgress) {
+    const coverage = formatDeepSeekInputCoverage(deepSeekProgress.input, locale);
+    if (locale === "zh") {
+      return `DeepSeek 正在生成阅读报告：模型 ${deepSeekProgress.model}，${coverage}。`;
+    }
+    return `DeepSeek is generating the reading report: model ${deepSeekProgress.model}, ${coverage}.`;
+  }
   return taskMessages[message] ?? message;
+}
+
+function isDeepSeekProgressMessage(message: string) {
+  return parseDeepSeekProgressMessage(message) !== null;
+}
+
+function parseDeepSeekProgressMessage(message: string) {
+  const match = message.match(
+    /^DeepSeek (?:report generation is running|request prepared) \(model=([^,]+), timeout=([^,]+), input=([^)]+)\)$/,
+  );
+  if (!match) {
+    return null;
+  }
+  return {
+    model: match[1],
+    timeout: match[2],
+    input: match[3],
+  };
+}
+
+function parsePdfProgressMessage(message: string) {
+  const match = message.match(/^PDF text extraction completed \(input=([^)]+)\)$/);
+  if (!match) {
+    return null;
+  }
+  return { input: match[1] };
+}
+
+function parsePartialReportProgressMessage(message: string) {
+  const match = message.match(
+    /^Partial reading report available \(coverage=([^,]+), chunks=(\d+)\)$/,
+  );
+  if (!match) {
+    return null;
+  }
+  return {
+    coverage: match[1],
+    chunks: match[2],
+  };
+}
+
+function formatExtractedTextSize(input: string, locale: Locale) {
+  const value = stripCharUnit(input);
+  return locale === "zh" ? `${value} 字符` : `${value} chars`;
+}
+
+function formatDeepSeekInputCoverage(input: string, locale: Locale) {
+  const value = stripCharUnit(input);
+  const [sent, total] = value.split("/");
+  if (sent && total) {
+    if (sent === total) {
+      if (locale === "zh") {
+        return `将处理 PDF 文本 ${total} 字符`;
+      }
+      return `will process ${total} chars from the PDF`;
+    }
+    if (locale === "zh") {
+      return `已准备 ${sent} 字符 / PDF 全文 ${total} 字符`;
+    }
+    return `prepared ${sent} chars / full PDF ${total} chars`;
+  }
+  if (locale === "zh") {
+    return `已准备 ${value} 字符`;
+  }
+  return `prepared ${value} chars`;
+}
+
+function stripCharUnit(input: string) {
+  return input.replace(/\s*chars$/i, "").trim();
 }
 
 function localizeSectionTitle(title: string, locale: Locale) {

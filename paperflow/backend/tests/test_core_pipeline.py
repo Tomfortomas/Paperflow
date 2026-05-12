@@ -106,6 +106,24 @@ def test_report_service_delegates_report_generation_to_agent(tmp_path: Path) -> 
     assert report.summary[0].text == "AI agent summary"
 
 
+def test_report_service_emits_intermediate_agent_progress(tmp_path: Path) -> None:
+    storage = PaperStorage(tmp_path / "data")
+    pdf_path = tmp_path / "paper.txt"
+    pdf_path.write_text("Abstract: Paperflow reads papers with an Agent.", encoding="utf-8")
+    session = storage.create_paper_session(pdf_path)
+    agent = FakePaperAgent()
+    agent.client = type("Client", (), {"model": "deepseek-v4-flash"})()
+    messages: list[str] = []
+
+    ReportService(agent=agent).generate_report(session, on_progress=messages.append)
+
+    assert any("PDF text extraction completed" in message for message in messages)
+    assert any("DeepSeek request prepared" in message for message in messages)
+    assert any("DeepSeek report generation is running" in message for message in messages)
+    assert any("DeepSeek report received; locating evidence" in message for message in messages)
+    assert any("Evidence locations resolved; saving report" in message for message in messages)
+
+
 def test_obsidian_note_contains_frontmatter_badges_and_evidence(tmp_path: Path) -> None:
     storage = PaperStorage(tmp_path / "data")
     pdf_path = tmp_path / "paper.txt"

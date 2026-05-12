@@ -4,15 +4,15 @@ import os
 import json
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import httpx
 
-from app.models import AgentRunMetrics, ReadingReport
+from app.models import AgentRunMetrics, ReadingReport, ReportSection
 
 
 REPORT_TEXT_BUDGET = 12000
-REPORT_READ_TIMEOUT_SECONDS = 45.0
+REPORT_READ_TIMEOUT_SECONDS = 90.0
 DEEPSEEK_MODEL_OPTIONS = [
     "deepseek-v4-flash",
     "deepseek-v4-pro",
@@ -46,7 +46,6 @@ class DeepSeekClient:
             or "https://api.deepseek.com/beta",
             model=os.getenv("DEEPSEEK_MODEL")
             or config.get("model")
-            or config.get("default_text_model")
             or "deepseek-v4-flash",
         )
 
@@ -78,7 +77,71 @@ class DeepSeekClient:
         paper_id: str,
         source_name: str,
         paper_text: str,
+        on_partial_report: Optional[Callable[[ReadingReport], None]] = None,
     ) -> ReadingReport:
+        chunks = _split_paper_text(paper_text)
+        reports: list[ReadingReport] = []
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+        saw_usage = False
+
+        for index, chunk in enumerate(chunks):
+            report, usage = self._generate_chunk_report(
+                paper_id=paper_id,
+                source_name=source_name,
+                paper_text=chunk,
+                chunk_index=index,
+                chunk_count=len(chunks),
+            )
+            reports.append(report)
+            if usage:
+                saw_usage = True
+                prompt_tokens += usage.get("prompt_tokens") or 0
+                completion_tokens += usage.get("completion_tokens") or 0
+                total_tokens += usage.get("total_tokens") or 0
+            if on_partial_report is not None:
+                partial = _merge_chunk_reports(paper_id, reports)
+                covered_chars = sum(len(chunk) for chunk in chunks[: index + 1])
+                total_chars = len(paper_text)
+                partial.agent_run = AgentRunMetrics(
+                    model=self.model,
+                    prompt_tokens=prompt_tokens if saw_usage else None,
+                    completion_tokens=completion_tokens if saw_usage else None,
+                    total_tokens=total_tokens if saw_usage else None,
+                    covered_chars=covered_chars,
+                    total_chars=total_chars,
+                    coverage_percent=1.0
+                    if total_chars == 0
+                    else min(1.0, covered_chars / total_chars),
+                    chunks_processed=index + 1,
+                )
+                on_partial_report(partial)
+
+        report = _merge_chunk_reports(paper_id, reports)
+        covered_chars = sum(len(chunk) for chunk in chunks)
+        total_chars = len(paper_text)
+        report.agent_run = AgentRunMetrics(
+            model=self.model,
+            prompt_tokens=prompt_tokens if saw_usage else None,
+            completion_tokens=completion_tokens if saw_usage else None,
+            total_tokens=total_tokens if saw_usage else None,
+            covered_chars=covered_chars,
+            total_chars=total_chars,
+            coverage_percent=1.0 if total_chars == 0 else min(1.0, covered_chars / total_chars),
+            chunks_processed=len(chunks),
+        )
+        return report
+
+    def _generate_chunk_report(
+        self,
+        *,
+        paper_id: str,
+        source_name: str,
+        paper_text: str,
+        chunk_index: int,
+        chunk_count: int,
+    ) -> tuple[ReadingReport, dict]:
         prompt = (
             "You are Paperflow's paper-reading AI agent. Extract an evidence-aware "
             "reading report from the provided paper text. Use R0 only for claims directly "
@@ -104,10 +167,13 @@ class DeepSeekClient:
             "Compute / Training, Limitations. If evidence is missing, create an R2 claim "
             "with uncertainty instead of guessing. Extract paper_title from the paper title "
             "or first-page metadata when available; use the original paper title, not the PDF "
-            "filename. If the title is unclear, return null.\n\n"
+            "filename. If the title is unclear, return null. "
+            "This may be one chunk from a longer paper; extract only claims supported by "
+            "this chunk and keep evidence quotes exact.\n\n"
             f"paper_id: {paper_id}\n"
             f"source_name: {source_name}\n"
-            f"paper_text:\n{paper_text[:REPORT_TEXT_BUDGET]}"
+            f"chunk: {chunk_index + 1}/{chunk_count}\n"
+            f"paper_text:\n{paper_text}"
         )
         response = httpx.post(
             f"{self.base_url}/chat/completions",
@@ -133,14 +199,7 @@ class DeepSeekClient:
         data["paper_id"] = paper_id
         self._fill_missing_sources(data, source_name)
         report = ReadingReport.model_validate(data)
-        usage = response_payload.get("usage") or {}
-        report.agent_run = AgentRunMetrics(
-            model=self.model,
-            prompt_tokens=usage.get("prompt_tokens"),
-            completion_tokens=usage.get("completion_tokens"),
-            total_tokens=usage.get("total_tokens"),
-        )
-        return report
+        return report, response_payload.get("usage") or {}
 
     def _fill_missing_sources(self, data: dict, source_name: str) -> None:
         for claim in data.get("summary", []):
@@ -155,6 +214,70 @@ class DeepSeekClient:
     def _fill_claim_sources(self, claim: dict, source_name: str) -> None:
         for evidence in claim.get("evidence", []):
             evidence.setdefault("source", source_name)
+
+
+def _split_paper_text(paper_text: str) -> list[str]:
+    if not paper_text:
+        return [""]
+
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for paragraph in re.split(r"\n{2,}", paper_text):
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        if len(paragraph) > REPORT_TEXT_BUDGET:
+            if current:
+                chunks.append("\n\n".join(current))
+                current = []
+                current_len = 0
+            for start in range(0, len(paragraph), REPORT_TEXT_BUDGET):
+                chunks.append(paragraph[start : start + REPORT_TEXT_BUDGET])
+            continue
+        projected = current_len + len(paragraph) + (2 if current else 0)
+        if current and projected > REPORT_TEXT_BUDGET:
+            chunks.append("\n\n".join(current))
+            current = [paragraph]
+            current_len = len(paragraph)
+        else:
+            current.append(paragraph)
+            current_len = projected
+
+    if current:
+        chunks.append("\n\n".join(current))
+
+    return chunks or [paper_text[:REPORT_TEXT_BUDGET]]
+
+
+def _merge_chunk_reports(paper_id: str, reports: list[ReadingReport]) -> ReadingReport:
+    if not reports:
+        return ReadingReport(paper_id=paper_id)
+
+    sections_by_title: dict[str, dict] = {}
+    section_order: list[str] = []
+    for report in reports:
+        for section in report.sections:
+            if section.title not in sections_by_title:
+                sections_by_title[section.title] = section.model_dump()
+                sections_by_title[section.title]["claims"] = []
+                section_order.append(section.title)
+            sections_by_title[section.title]["claims"].extend(
+                claim.model_dump() for claim in section.claims
+            )
+
+    merged = ReadingReport(
+        paper_id=paper_id,
+        paper_title=next((report.paper_title for report in reports if report.paper_title), None),
+        summary=[claim for report in reports for claim in report.summary],
+        sections=[
+            ReportSection.model_validate(sections_by_title[title])
+            for title in section_order
+        ],
+        related_work=[item for report in reports for item in report.related_work],
+    )
+    return merged
 
 
 def _load_deepseek_config() -> dict:

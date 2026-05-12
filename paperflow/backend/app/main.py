@@ -1,20 +1,22 @@
 from __future__ import annotations
 
+import inspect
 import re
 import os
 import tempfile
 import time
+import uuid
 from pathlib import Path
-from threading import Thread
 from typing import Dict, List, Optional
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.agent import DeepSeekPaperAgent
+from app.chat_agent import generate_chat_response, sse_event
 from app.compare import compare_papers
 from app.deepseek import (
     DEEPSEEK_MODEL_OPTIONS,
@@ -98,6 +100,20 @@ REPORT_TIMEOUT_MESSAGE = (
     "DeepSeek report generation timed out. The PDF may be long or the model may be slow; "
     "retry later or increase DEEPSEEK_REPORT_READ_TIMEOUT."
 )
+
+
+def _report_progress_for_message(message: str) -> float:
+    if message.startswith("PDF text extraction completed"):
+        return 0.25
+    if message.startswith("DeepSeek request prepared"):
+        return 0.32
+    if message.startswith("DeepSeek report generation is running"):
+        return 0.35
+    if message == "DeepSeek report received; locating evidence":
+        return 0.92
+    if message == "Evidence locations resolved; saving report":
+        return 0.96
+    return 0.35
 
 
 def _mark_interrupted_report_runs(storage: PaperStorage) -> None:
@@ -255,29 +271,77 @@ def create_app(
         metadata: Optional[PaperMetadata] = None,
     ) -> PaperSession:
         session = storage.create_paper_session(tmp_path, title=title, metadata=metadata)
-        Thread(target=run_report_task, args=(session,), daemon=True).start()
+        task_queue.submit(
+            lambda handle: run_report_task(session, handle),
+            kind=AgentTaskKind.REPORT,
+            paper_id=session.paper.id,
+            message="Queued for Agent parsing",
+        )
         return session
 
-    def run_report_task(session: PaperSession) -> None:
+    def run_report_task(session: PaperSession, handle=None) -> Optional[str]:
+        def update_agent_progress(message: str) -> None:
+            progress = _report_progress_for_message(message)
+            storage.update_status(
+                session.paper.id,
+                TaskStatus(
+                    stage="processing",
+                    message=message,
+                    progress=progress,
+                ),
+            )
+            if handle is not None:
+                handle.progress(progress, message)
+
+        def save_partial_report(partial: ReadingReport) -> None:
+            if partial.agent_run is None:
+                partial.agent_run = AgentRunMetrics()
+            partial.agent_run.elapsed_seconds = round(time.perf_counter() - started_at, 2)
+            reports[session.paper.id] = partial
+            storage.save_report(partial)
+            if partial.paper_title:
+                storage.update_paper_title(session.paper.id, partial.paper_title)
+            coverage = partial.agent_run.coverage_percent if partial.agent_run else None
+            chunks = partial.agent_run.chunks_processed if partial.agent_run else None
+            coverage_text = f"{round((coverage or 0) * 100)}%" if coverage is not None else "partial"
+            storage.update_status(
+                session.paper.id,
+                TaskStatus(
+                    stage="processing",
+                    message=f"Partial reading report available (coverage={coverage_text}, chunks={chunks or 1})",
+                    progress=min(0.9, max(0.4, coverage or 0.4)),
+                ),
+            )
+            if handle is not None:
+                handle.progress(min(0.9, max(0.4, coverage or 0.4)), "Partial reading report available")
+
         storage.update_status(
             session.paper.id,
             TaskStatus(stage="processing", message=REPORT_PREPARING_MESSAGE, progress=0.15),
         )
+        if handle is not None:
+            handle.progress(0.15, REPORT_PREPARING_MESSAGE)
         started_at = time.perf_counter()
         try:
-            report = report_service.generate_report(session)
+            report_params = inspect.signature(report_service.generate_report).parameters
+            kwargs = {}
+            if "on_progress" in report_params:
+                kwargs["on_progress"] = update_agent_progress
+            if "on_partial_report" in report_params:
+                kwargs["on_partial_report"] = save_partial_report
+            report = report_service.generate_report(session, **kwargs)
         except httpx.ReadTimeout:
             storage.update_status(
                 session.paper.id,
                 TaskStatus(stage="failed", message=REPORT_TIMEOUT_MESSAGE, progress=1.0),
             )
-            return
+            raise
         except Exception as exc:
             storage.update_status(
                 session.paper.id,
                 TaskStatus(stage="failed", message=str(exc), progress=1.0),
             )
-            return
+            raise
 
         elapsed_seconds = round(time.perf_counter() - started_at, 2)
         if report.agent_run is None:
@@ -293,16 +357,25 @@ def create_app(
             except Exception:
                 parsed = None
         if parsed is not None and parsed.chunks:
-            save_chunks(storage.chunks_path(session.paper.id), parsed)
+            try:
+                save_chunks(storage.chunks_path(session.paper.id), parsed)
+            except Exception:
+                # The report itself is the critical artifact. Chunk cache writes
+                # improve PDF highlighting but should not strand a completed run
+                # in "processing" if the cache is unavailable.
+                pass
 
         reports[session.paper.id] = report
-        storage.save_report(report)
+        report_path = storage.save_report(report)
         if report.paper_title:
             storage.update_paper_title(session.paper.id, report.paper_title)
         storage.update_status(
             session.paper.id,
             TaskStatus(stage="completed", message="Reading report generated", progress=1.0),
         )
+        if handle is not None:
+            handle.progress(1.0, "Reading report generated")
+        return str(report_path)
 
     # ----------------------------------------------------------- import paths
 
@@ -489,7 +562,12 @@ def create_app(
             status=TaskStatus(stage="queued", message="Queued for Agent rerun", progress=0.05),
         )
         storage.update_status(paper.id, session.status)
-        Thread(target=run_report_task, args=(session,), daemon=True).start()
+        task_queue.submit(
+            lambda handle: run_report_task(session, handle),
+            kind=AgentTaskKind.REPORT,
+            paper_id=paper.id,
+            message="Queued for Agent rerun",
+        )
         return session
 
     @app.get("/api/agent/status")
@@ -575,8 +653,7 @@ def create_app(
             evidence=first.evidence,
         )
 
-    @app.post("/api/papers/{paper_id}/chat")
-    def chat_paper(paper_id: str, request: PaperChatRequest):
+    def _build_and_persist_chat_response(paper_id: str, request: PaperChatRequest) -> PaperChatResponse:
         question = request.question.strip()
         if not question:
             raise HTTPException(status_code=400, detail="question is required")
@@ -584,53 +661,59 @@ def create_app(
             report = reports.get(paper_id) or storage.load_report(paper_id)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="Report not found")
-
-        answer = _answer_chat_from_report(report, request, question)
-        steps = [
-            PaperChatStep(
-                id="read-report",
-                label="Read report",
-                detail="Loaded the persisted Reading Report.",
-            ),
-            PaperChatStep(
-                id="locate-evidence",
-                label="Locate evidence",
-                detail="Used the selected claim/evidence when available.",
-            ),
-            PaperChatStep(
-                id="check-r1",
-                label="Check R1 context",
-                detail=f"Checked {len(report.related_work)} related-work entries.",
-            ),
-            PaperChatStep(
-                id="compose-answer",
-                label="Compose answer",
-                detail="Generated an evidence-aware answer with reliability label.",
-            ),
-        ]
-        messages = [
-            PaperChatMessage(
-                id=f"user-{paper_id[:8]}",
-                role="user",
-                content=question,
-            ),
-            PaperChatMessage(
-                id=f"assistant-{paper_id[:8]}",
-                role="assistant",
-                content=answer.text,
-                reliability=answer.reliability,
-                evidence=answer.evidence,
-                uncertainty=answer.uncertainty,
-            ),
-        ]
-        return PaperChatResponse(
-            id=f"chat-{paper_id[:8]}",
+        chat_id = storage.default_chat_id(paper_id)
+        response = generate_chat_response(
             paper_id=paper_id,
-            status="completed",
-            steps=steps,
-            messages=messages,
-            answer=answer,
+            chat_id=chat_id,
+            question=question,
+            request=request,
+            report=report,
+            r1_cache=storage.load_r1(paper_id),
+            client=_agent_deepseek_client(report_service),
         )
+        turn_id = f"turn-{uuid.uuid4().hex[:10]}"
+        persisted = storage.save_chat_turn(response, turn_id=turn_id)
+        task = task_queue.record_completed(
+            kind=AgentTaskKind.CHAT,
+            paper_id=paper_id,
+            message="Agent chat completed",
+        )
+        persisted.task_id = task.id
+        persisted.used_context = response.used_context
+        return persisted
+
+    @app.get("/api/papers/{paper_id}/chats")
+    def list_paper_chats(paper_id: str):
+        try:
+            storage.get_paper(paper_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Paper not found")
+        return [chat.model_dump(mode="json") for chat in storage.list_chats(paper_id)]
+
+    @app.get("/api/papers/{paper_id}/chats/{chat_id}")
+    def get_paper_chat(paper_id: str, chat_id: str):
+        try:
+            return storage.load_chat(paper_id, chat_id).model_dump(mode="json")
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Chat not found")
+
+    @app.post("/api/papers/{paper_id}/chat")
+    def chat_paper(paper_id: str, request: PaperChatRequest):
+        return _build_and_persist_chat_response(paper_id, request)
+
+    @app.post("/api/papers/{paper_id}/chat/stream")
+    def stream_chat_paper(paper_id: str, request: PaperChatRequest):
+        def generate():
+            try:
+                response = _build_and_persist_chat_response(paper_id, request)
+                for step in response.steps[-5:]:
+                    yield sse_event("step", step.model_dump(mode="json"))
+                yield sse_event("delta", {"text": response.answer.text})
+                yield sse_event("final", {"chat_response": response.model_dump(mode="json")})
+            except Exception as exc:
+                yield sse_event("error", {"message": str(exc)})
+
+        return StreamingResponse(generate(), media_type="text/event-stream")
 
     @app.get("/api/papers/{paper_id}/pdf")
     def get_pdf(paper_id: str):

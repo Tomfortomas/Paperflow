@@ -38,7 +38,14 @@ export interface PaperflowClient {
   getReport(paperId: string): Promise<ReadingReport>;
   askPaper(paperId: string, question: string): Promise<Claim>;
   askSelection(paperId: string, payload: AskSelectionPayload): Promise<Claim>;
+  listChats(paperId: string): Promise<PaperChatResponse[]>;
+  getChat(paperId: string, chatId: string): Promise<PaperChatResponse>;
   chatPaper(paperId: string, payload: PaperChatRequest): Promise<PaperChatResponse>;
+  streamChatPaper(
+    paperId: string,
+    payload: PaperChatRequest,
+    onEvent: (event: { event: string; data: unknown }) => void,
+  ): Promise<void>;
   getChunks(paperId: string): Promise<ParsedPdfPayload>;
   pdfUrl(paperId: string): string;
   runR1Search(paperId: string): Promise<R1SearchResult>;
@@ -128,12 +135,49 @@ export function createPaperflowClient(baseUrl = defaultBaseUrl): PaperflowClient
         body: JSON.stringify(payload),
       });
     },
+    async listChats(paperId: string) {
+      return request<PaperChatResponse[]>(`${baseUrl}/api/papers/${paperId}/chats`);
+    },
+    async getChat(paperId: string, chatId: string) {
+      return request<PaperChatResponse>(`${baseUrl}/api/papers/${paperId}/chats/${chatId}`);
+    },
     async chatPaper(paperId: string, payload: PaperChatRequest) {
       return request<PaperChatResponse>(`${baseUrl}/api/papers/${paperId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+    },
+    async streamChatPaper(paperId: string, payload: PaperChatRequest, onEvent) {
+      const response = await fetch(`${baseUrl}/api/papers/${paperId}/chat/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
+      }
+      if (!response.body) {
+        return;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+        events.forEach((raw) => {
+          const parsed = parseSseEvent(raw);
+          if (parsed) onEvent(parsed);
+        });
+      }
+      if (buffer.trim()) {
+        const parsed = parseSseEvent(buffer);
+        if (parsed) onEvent(parsed);
+      }
     },
     async getChunks(paperId: string) {
       return request<ParsedPdfPayload>(`${baseUrl}/api/papers/${paperId}/chunks`);
@@ -222,6 +266,19 @@ export function createPaperflowClient(baseUrl = defaultBaseUrl): PaperflowClient
       });
     },
   };
+}
+
+function parseSseEvent(raw: string): { event: string; data: unknown } | null {
+  const event = raw.match(/^event:\s*(.+)$/m)?.[1]?.trim() || "message";
+  const dataRaw = raw.match(/^data:\s*(.+)$/m)?.[1];
+  if (!dataRaw) {
+    return null;
+  }
+  try {
+    return { event, data: JSON.parse(dataRaw) };
+  } catch {
+    return { event, data: dataRaw };
+  }
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {

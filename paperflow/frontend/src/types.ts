@@ -77,6 +77,10 @@ export interface AgentRunMetrics {
   prompt_tokens?: number | null;
   completion_tokens?: number | null;
   total_tokens?: number | null;
+  covered_chars?: number | null;
+  total_chars?: number | null;
+  coverage_percent?: number | null;
+  chunks_processed?: number | null;
 }
 
 export interface PaperChatRequest {
@@ -108,6 +112,8 @@ export interface PaperChatResponse {
   id: string;
   paper_id: string;
   status: "idle" | "running" | "completed" | "failed" | string;
+  task_id?: string | null;
+  used_context?: string[];
   steps: PaperChatStep[];
   messages: PaperChatMessage[];
   answer: Claim;
@@ -281,6 +287,11 @@ export interface FieldMapGraphEdge {
   source: string;
   target: string;
   relation: string;
+  source_type?: "rule" | "agent_suggested" | "user" | string;
+  rationale?: string | null;
+  evidence?: Evidence[];
+  confidence?: number | null;
+  user_confirmed?: boolean | null;
 }
 
 export interface FieldMapRelationshipGraph {

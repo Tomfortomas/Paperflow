@@ -76,16 +76,45 @@ def test_chat_returns_transcript_steps_and_evidence(tmp_path: Path) -> None:
     payload = chat.json()
     assert payload["paper_id"] == paper_id
     assert payload["status"] == "completed"
-    assert [step["id"] for step in payload["steps"]] == [
-        "read-report",
-        "locate-evidence",
-        "check-r1",
-        "compose-answer",
+    assert [step["label"] for step in payload["steps"]] == [
+        "Read report",
+        "Locate evidence",
+        "Check R1 context",
+        "Compose answer",
+        "Persist transcript",
     ]
     assert payload["messages"][0]["role"] == "user"
     assert payload["messages"][1]["role"] == "assistant"
     assert payload["answer"]["reliability"] == "R0"
     assert payload["answer"]["evidence"][0]["quote"]
+    assert payload["used_context"]
+
+    chats = client.get(f"/api/papers/{paper_id}/chats").json()
+    assert len(chats) == 1
+    assert chats[0]["messages"][0]["content"] == "只看 benchmark"
+    assert chats[0]["messages"][1]["role"] == "assistant"
+
+    tasks = client.get("/api/tasks").json()
+    assert any(task["kind"] == "chat" and task["paper_id"] == paper_id for task in tasks)
+
+
+def test_chat_stream_returns_step_and_final_events(tmp_path: Path) -> None:
+    app = create_app(tmp_path / "data", report_service=ReportService(agent=FakePaperAgent()))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("paper.pdf", b"Abstract: A paper reading IDE.", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+    wait_for_status(client, paper_id, "completed")
+
+    stream = client.post(f"/api/papers/{paper_id}/chat/stream", json={"question": "只看 task"})
+
+    assert stream.status_code == 200
+    assert "event: step" in stream.text
+    assert "event: final" in stream.text
+    assert "chat_response" in stream.text
 
 
 def test_chat_rejects_empty_question(tmp_path: Path) -> None:
@@ -231,6 +260,8 @@ def test_delete_paper_removes_library_entry_and_artifacts(tmp_path: Path) -> Non
 
     note = client.post(f"/api/papers/{paper_id}/export-obsidian").json()
     note_path = Path(note["note_path"])
+    client.post(f"/api/papers/{paper_id}/chat", json={"question": "只看 task"})
+    assert client.get(f"/api/papers/{paper_id}/chats").json()
 
     delete_response = client.delete(f"/api/papers/{paper_id}")
 
@@ -238,6 +269,7 @@ def test_delete_paper_removes_library_entry_and_artifacts(tmp_path: Path) -> Non
     assert client.get("/api/papers").json() == []
     assert client.get(f"/api/papers/{paper_id}/status").status_code == 404
     assert client.get(f"/api/papers/{paper_id}/report").status_code == 404
+    assert client.get(f"/api/papers/{paper_id}/chats").status_code == 404
     assert not pdf_path.exists()
     assert not report_path.exists()
     assert not note_path.exists()
@@ -283,6 +315,73 @@ def test_processing_status_uses_non_misleading_initial_progress(tmp_path: Path) 
     blocking_service.release.set()
 
 
+def test_processing_status_surfaces_deepseek_wait_context(tmp_path: Path) -> None:
+    blocking_service = BlockingDeepSeekProgressService()
+    app = create_app(tmp_path / "data", report_service=blocking_service)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("slow-deepseek.pdf", b"Abstract: slow model", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+
+    assert blocking_service.started.wait(timeout=2)
+    status = client.get(f"/api/papers/{paper_id}/status").json()
+
+    assert status["stage"] == "processing"
+    assert status["progress"] >= 0.35
+    assert "DeepSeek report generation is running" in status["message"]
+    assert "model=deepseek-v4-flash" in status["message"]
+    assert "timeout=90s" in status["message"]
+    blocking_service.release.set()
+
+
+def test_partial_report_is_available_while_agent_continues(tmp_path: Path) -> None:
+    partial_service = PartialReportService()
+    app = create_app(tmp_path / "data", report_service=partial_service)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("partial.pdf", b"Abstract: partial", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+
+    assert partial_service.partial_ready.wait(timeout=2)
+    status = client.get(f"/api/papers/{paper_id}/status").json()
+    report = client.get(f"/api/papers/{paper_id}/report").json()
+
+    assert status["stage"] == "processing"
+    assert "Partial reading report available" in status["message"]
+    assert report["summary"][0]["text"] == "First chunk summary"
+    assert report["agent_run"]["coverage_percent"] == 0.5
+    assert report["agent_run"]["elapsed_seconds"] is not None
+
+    partial_service.release.set()
+
+
+def test_report_completion_survives_chunk_cache_failure(tmp_path: Path, monkeypatch) -> None:
+    def fail_save_chunks(*args, **kwargs):
+        raise OSError("chunk cache unavailable")
+
+    monkeypatch.setattr("app.main.save_chunks", fail_save_chunks)
+    app = create_app(tmp_path / "data", report_service=ChunkCacheFailureReportService())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/papers/import",
+        files={"file": ("cache-failure.pdf", b"Abstract: cache failure", "application/pdf")},
+    )
+    paper_id = response.json()["paper"]["id"]
+
+    status = wait_for_status(client, paper_id, "completed")
+    report = client.get(f"/api/papers/{paper_id}/report").json()
+
+    assert status["message"] == "Reading report generated"
+    assert report["summary"][0]["text"] == "Report survives chunk cache failure"
+
+
 def test_deepseek_read_timeout_surfaces_actionable_failed_status(tmp_path: Path) -> None:
     app = create_app(tmp_path / "data", report_service=TimeoutReportService())
     client = TestClient(app)
@@ -311,14 +410,14 @@ def test_agent_status_endpoint_reports_configured_state(tmp_path: Path) -> None:
 def test_agent_config_endpoint_updates_model_and_timeout(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
-    monkeypatch.setenv("DEEPSEEK_REPORT_READ_TIMEOUT", "45")
+    monkeypatch.setenv("DEEPSEEK_REPORT_READ_TIMEOUT", "90")
     try:
         app = create_app(tmp_path / "data")
         client = TestClient(app)
 
         initial = client.get("/api/agent/config").json()
         assert initial["model"] == "deepseek-v4-flash"
-        assert initial["report_read_timeout"] == 45
+        assert initial["report_read_timeout"] == 90
 
         updated = client.put(
             "/api/agent/config",
@@ -511,6 +610,72 @@ class BlockingReportService:
         self.started.set()
         self.release.wait(timeout=5)
         return self.inner.generate_report(session)
+
+
+class BlockingDeepSeekProgressService:
+    def __init__(self) -> None:
+        self.started = Event()
+        self.release = Event()
+        self.inner = ReportService(agent=FakePaperAgent())
+
+    def generate_report(self, session, on_progress=None) -> ReadingReport:
+        if on_progress is not None:
+            on_progress(
+                "DeepSeek report generation is running "
+                "(model=deepseek-v4-flash, timeout=90s, input=18 chars)"
+            )
+        self.started.set()
+        self.release.wait(timeout=5)
+        return self.inner.generate_report(session)
+
+
+class PartialReportService:
+    def __init__(self) -> None:
+        self.partial_ready = Event()
+        self.release = Event()
+        self.inner = ReportService(agent=FakePaperAgent())
+
+    def generate_report(self, session, on_progress=None, on_partial_report=None) -> ReadingReport:
+        if on_partial_report is not None:
+            partial = ReadingReport(
+                paper_id=session.paper.id,
+                summary=[
+                    {
+                        "id": "partial-summary",
+                        "text": "First chunk summary",
+                        "reliability": "R0",
+                        "evidence": [],
+                    }
+                ],
+                agent_run={
+                    "coverage_percent": 0.5,
+                    "covered_chars": 12000,
+                    "total_chars": 24000,
+                    "chunks_processed": 1,
+                },
+            )
+            on_partial_report(partial)
+        self.partial_ready.set()
+        self.release.wait(timeout=5)
+        return self.inner.generate_report(session)
+
+
+class ChunkCacheFailureReportService:
+    def generate_report(self, session) -> ReadingReport:
+        return ReadingReport(
+            paper_id=session.paper.id,
+            summary=[
+                {
+                    "id": "summary",
+                    "text": "Report survives chunk cache failure",
+                    "reliability": "R0",
+                    "evidence": [],
+                }
+            ],
+        )
+
+    def parsed_pdf(self):
+        return type("Parsed", (), {"chunks": [object()]})()
 
 
 class TimeoutReportService:

@@ -171,6 +171,32 @@ class TaskQueue:
         with self._lock:
             return list(self._tasks.values())
 
+    def record_completed(
+        self,
+        *,
+        kind: AgentTaskKind = AgentTaskKind.OTHER,
+        paper_id: Optional[str] = None,
+        message: str = "done",
+        result_path: Optional[Path] = None,
+    ) -> AgentTask:
+        task_id = uuid.uuid4().hex[:16]
+        now = time.time()
+        task = AgentTask(
+            id=task_id,
+            kind=kind,
+            paper_id=paper_id,
+            stage="completed",
+            message=message,
+            progress=1.0,
+            started_at=now,
+            finished_at=now,
+            result_path=result_path,
+        )
+        with self._lock:
+            self._tasks[task_id] = task
+            self._persist(task)
+        return task
+
     def cancel(self, task_id: str) -> Optional[AgentTask]:
         with self._lock:
             task = self._tasks.get(task_id)

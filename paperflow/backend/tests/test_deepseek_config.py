@@ -4,7 +4,9 @@ import json
 from app.deepseek import DeepSeekClient
 
 
-def test_deepseek_client_loads_deepseek_tui_config(monkeypatch, tmp_path: Path) -> None:
+def test_deepseek_client_uses_paperflow_flash_default_with_deepseek_tui_config(
+    monkeypatch, tmp_path: Path
+) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         'api_key = "config-key"\n'
@@ -20,7 +22,7 @@ def test_deepseek_client_loads_deepseek_tui_config(monkeypatch, tmp_path: Path) 
     assert client is not None
     assert client.api_key == "config-key"
     assert client.base_url == "https://api.deepseek.com/beta"
-    assert client.model == "deepseek-v4-pro"
+    assert client.model == "deepseek-v4-flash"
 
 
 def test_deepseek_env_key_overrides_missing_config(monkeypatch) -> None:
@@ -37,6 +39,7 @@ def test_deepseek_env_key_overrides_missing_config(monkeypatch) -> None:
 
 def test_deepseek_report_prompt_requires_chinese_explanations(monkeypatch) -> None:
     captured = {}
+    monkeypatch.delenv("DEEPSEEK_REPORT_READ_TIMEOUT", raising=False)
 
     def fake_post(url, headers, json, timeout):
         captured["payload"] = json
@@ -105,7 +108,7 @@ def test_deepseek_report_prompt_requires_chinese_explanations(monkeypatch) -> No
     assert '"paper_title": string|null' in user_prompt
     assert "evidence.quote must be an exact quote" in user_prompt
     assert "not the PDF filename" in user_prompt
-    assert captured["timeout"].read <= 45
+    assert captured["timeout"].read == 90
     assert report.paper_title == "Evidence-Aware Workflows"
     assert report.agent_run is not None
     assert report.agent_run.model == "deepseek-v4-flash"
@@ -115,10 +118,10 @@ def test_deepseek_report_prompt_requires_chinese_explanations(monkeypatch) -> No
 
 
 def test_deepseek_report_prompt_has_bounded_paper_text(monkeypatch) -> None:
-    captured = {}
+    captured = {"prompts": []}
 
     def fake_post(url, headers, json, timeout):
-        captured["prompt"] = json["messages"][1]["content"]
+        captured["prompts"].append(json["messages"][1]["content"])
         return FakeResponse(
             {
                 "choices": [
@@ -148,7 +151,9 @@ def test_deepseek_report_prompt_has_bounded_paper_text(monkeypatch) -> None:
         paper_text="A" * 50000,
     )
 
-    assert len(captured["prompt"]) < 15000
+    assert len(captured["prompts"]) > 1
+    assert all(len(prompt) < 15000 for prompt in captured["prompts"])
+    assert "A" * 1000 in captured["prompts"][-1]
 
 
 class FakeResponse:

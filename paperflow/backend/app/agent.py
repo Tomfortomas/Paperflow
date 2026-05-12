@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Callable, Optional, Protocol
 
 from app.deepseek import DeepSeekClient
 from app.models import Claim, Evidence, ReadingReport, RelatedWorkItem, ReliabilityLevel, ReportSection
@@ -12,6 +12,7 @@ class PaperAgent(Protocol):
         paper_id: str,
         source_name: str,
         paper_text: str,
+        on_partial_report: Optional[Callable[["ReadingReport"], None]] = None,
     ) -> ReadingReport:
         ...
 
@@ -25,11 +26,13 @@ class DeepSeekPaperAgent:
         paper_id: str,
         source_name: str,
         paper_text: str,
+        on_partial_report: Optional[Callable[[ReadingReport], None]] = None,
     ) -> ReadingReport:
         return self.client.generate_reading_report(
             paper_id=paper_id,
             source_name=source_name,
             paper_text=paper_text,
+            on_partial_report=on_partial_report,
         )
 
 

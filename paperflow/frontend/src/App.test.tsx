@@ -1,8 +1,8 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { App } from "./App";
+import { App, ReportRunMetrics } from "./App";
 import type { Paper, ReadingReport } from "./types";
 import type { PaperflowClient } from "./api";
 
@@ -116,6 +116,99 @@ describe("Paperflow app", () => {
     expect(screen.getByText(/解析指标 · 1\.5k tokens · 12s/)).toBeInTheDocument();
   });
 
+  it("shows full-document coverage when reports are generated from chunks", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        initialPapers={[paper]}
+        initialReports={{
+          "paper-1": {
+            ...report,
+            agent_run: {
+              elapsed_seconds: 18,
+              total_tokens: 4200,
+              covered_chars: 89500,
+              total_chars: 89500,
+              coverage_percent: 1,
+              chunks_processed: 8,
+            } as any,
+          },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+
+    expect(screen.getByText(/覆盖全文 100%/)).toBeInTheDocument();
+    expect(screen.getByText(/8 chunks/)).toBeInTheDocument();
+  });
+
+  it("renders a partial report while Agent generation is still running", async () => {
+    const user = userEvent.setup();
+    const processingPaper: Paper = {
+      ...paper,
+      status: {
+        stage: "processing",
+        message: "Partial reading report available (coverage=50%, chunks=1)",
+        progress: 0.45,
+      },
+    };
+    const partialReport: ReadingReport = {
+      ...report,
+      summary: [
+        {
+          id: "partial-summary",
+          text: "First chunk summary",
+          reliability: "R0",
+          evidence: [],
+        },
+      ],
+      agent_run: {
+        elapsed_seconds: 60,
+        coverage_percent: 0.5,
+        chunks_processed: 1,
+      },
+    };
+    const client = fakeClient({
+      getStatus: vi.fn().mockResolvedValue(processingPaper.status),
+      getReport: vi.fn().mockResolvedValue(partialReport),
+    });
+
+    render(<App client={client} initialPapers={[processingPaper]} />);
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+
+    expect((await screen.findAllByText(/First chunk summary/)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/覆盖全文 50%/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/报告仍在动态生成中/).length).toBeGreaterThan(0);
+  });
+
+  it("keeps elapsed parse metrics ticking while a partial report is live", () => {
+    vi.useFakeTimers();
+    render(
+      <ReportRunMetrics
+        isLive
+        report={{
+          ...report,
+          agent_run: {
+            elapsed_seconds: 60,
+            total_tokens: 12000,
+            coverage_percent: 0.5,
+            chunks_processed: 1,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/1m 0s/)).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+
+    expect(screen.getByText(/1m 4s/)).toBeInTheDocument();
+  });
+
   it("deletes a paper after inline confirmation", async () => {
     const user = userEvent.setup();
     const client = fakeClient({
@@ -168,33 +261,36 @@ describe("Paperflow app", () => {
 
   it("renders an Agent chat panel with transcript and process cards", async () => {
     const user = userEvent.setup();
-    const client = fakeClient({
-      chatPaper: vi.fn().mockResolvedValue({
-        id: "chat-1",
-        paper_id: "paper-1",
-        status: "completed",
-        steps: [
-          { id: "read-report", label: "Read report", status: "completed", detail: "Loaded report" },
-          { id: "locate-evidence", label: "Locate evidence", status: "completed", detail: "Used evidence" },
-          { id: "check-r1", label: "Check R1 context", status: "completed", detail: "Checked related work" },
-          { id: "compose-answer", label: "Compose answer", status: "completed", detail: "Generated answer" },
-        ],
-        messages: [
-          { id: "user-1", role: "user", content: "只看 benchmark" },
-          {
-            id: "assistant-1",
-            role: "assistant",
-            content: "It extracts structured reading reports.",
-            reliability: "R0",
-            evidence: [{ id: "e2", source: "Paperflow.pdf", page: 2, quote: "structured reports" }],
-          },
-        ],
-        answer: {
-          id: "chat-answer",
-          text: "It extracts structured reading reports.",
+    const chatResponse = {
+      id: "chat-1",
+      paper_id: "paper-1",
+      status: "completed",
+      steps: [
+        { id: "read-report", label: "Read report", status: "completed", detail: "Loaded report" },
+        { id: "locate-evidence", label: "Locate evidence", status: "completed", detail: "Used evidence" },
+        { id: "check-r1", label: "Check R1 context", status: "completed", detail: "Checked related work" },
+        { id: "compose-answer", label: "Compose answer", status: "completed", detail: "Generated answer" },
+      ],
+      messages: [
+        { id: "user-1", role: "user", content: "只看 benchmark" },
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "It extracts structured reading reports.",
           reliability: "R0",
           evidence: [{ id: "e2", source: "Paperflow.pdf", page: 2, quote: "structured reports" }],
         },
+      ],
+      answer: {
+        id: "chat-answer",
+        text: "It extracts structured reading reports.",
+        reliability: "R0",
+        evidence: [{ id: "e2", source: "Paperflow.pdf", page: 2, quote: "structured reports" }],
+      },
+    };
+    const client = fakeClient({
+      streamChatPaper: vi.fn().mockImplementation(async (_paperId, _payload, onEvent) => {
+        onEvent({ event: "final", data: { chat_response: chatResponse } });
       }),
     });
     render(<App client={client} initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
@@ -204,7 +300,7 @@ describe("Paperflow app", () => {
     await user.type(screen.getByPlaceholderText(/benchmark/), "只看 benchmark");
     await user.click(screen.getByRole("button", { name: /^发送$/ }));
 
-    expect(client.chatPaper).toHaveBeenCalledWith(
+    expect(client.streamChatPaper).toHaveBeenCalledWith(
       "paper-1",
       expect.objectContaining({
         question: "只看 benchmark",
@@ -213,10 +309,36 @@ describe("Paperflow app", () => {
         page: 2,
         quote: "structured reports",
       }),
+      expect.any(Function),
     );
     expect(await screen.findByText("Read report")).toBeInTheDocument();
     expect(screen.getByText("只看 benchmark")).toBeInTheDocument();
     expect(screen.getAllByText("It extracts structured reading reports.").length).toBeGreaterThan(0);
+  });
+
+  it("restores persisted Agent chat history when opening a workspace", async () => {
+    const user = userEvent.setup();
+    const client = fakeClient({
+      listChats: vi.fn().mockResolvedValue([
+        {
+          id: "chat-paper-1",
+          paper_id: "paper-1",
+          status: "completed",
+          steps: [{ id: "read-report", label: "Read report", status: "completed" }],
+          messages: [
+            { id: "user-old", role: "user", content: "之前问过的问题" },
+            { id: "assistant-old", role: "assistant", content: "持久化回答", reliability: "R0", evidence: [] },
+          ],
+          answer: { id: "answer-old", text: "持久化回答", reliability: "R0", evidence: [] },
+        },
+      ]),
+    });
+
+    render(<App client={client} initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+
+    expect(await screen.findByText("之前问过的问题")).toBeInTheDocument();
+    expect(screen.getByText("持久化回答")).toBeInTheDocument();
   });
 
   it("offers a PDF viewer toggle once the report is ready", async () => {
@@ -226,6 +348,17 @@ describe("Paperflow app", () => {
     await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
 
     expect(screen.getByRole("button", { name: /打开 PDF 阅读器/i })).toBeInTheDocument();
+  });
+
+  it("opens the PDF viewer from an evidence detail click", async () => {
+    const user = userEvent.setup();
+    render(<App initialPapers={[paper]} initialReports={{ "paper-1": report }} />);
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+    await user.click(screen.getAllByRole("button", { name: /查看 1 条证据/i })[0]);
+    await user.click(screen.getByRole("button", { name: /在 PDF 中查看/i }));
+
+    expect(screen.getByText(/PDF 阅读/)).toBeInTheDocument();
   });
 
   it("renders a Field Map lineage graph", async () => {
@@ -252,7 +385,17 @@ describe("Paperflow app", () => {
             { id: "old", title: "Old Foundation", role: "predecessor", year: 2017, event_type: "milestone" },
             { id: "seed", title: "Actual Paper Title", role: "seed", year: 2024, event_type: "other" },
           ],
-          edges: [{ id: "old-seed", source: "old", target: "seed", relation: "precedes" }],
+          edges: [
+            {
+              id: "old-seed",
+              source: "old",
+              target: "seed",
+              relation: "informs",
+              source_type: "agent_suggested",
+              rationale: "Agent rationale",
+              confidence: 0.72,
+            },
+          ],
         },
       }),
     });
@@ -265,6 +408,8 @@ describe("Paperflow app", () => {
     expect(await screen.findByText(/前后关系图/i)).toBeInTheDocument();
     expect(screen.getAllByText("Old Foundation").length).toBeGreaterThan(0);
     expect(screen.getByRole("img", { name: /Old Foundation · 前置基础 · 2017 · R1/i })).toBeInTheDocument();
+    expect(screen.getByText(/Agent 建议关系/i)).toBeInTheDocument();
+    expect(screen.getByText(/Agent rationale/i)).toBeInTheDocument();
     expect(screen.getAllByText("Actual Paper Title")[0]).toBeInTheDocument();
   });
 
@@ -405,6 +550,38 @@ describe("Paperflow app", () => {
     expect(screen.getByText(/失败点/)).toBeInTheDocument();
   });
 
+  it("shows DeepSeek wait context while the report is still running", async () => {
+    const user = userEvent.setup();
+    const runningPaper: Paper = {
+      ...paper,
+      status: {
+        stage: "processing",
+        message:
+          "DeepSeek report generation is running (model=deepseek-v4-flash, timeout=90s, input=48.2k/48.2k chars)",
+        progress: 0.35,
+      },
+    };
+
+    const client = fakeClient({
+      getStatus: vi.fn().mockResolvedValue(runningPaper.status),
+      getReport: vi.fn(),
+    });
+
+    render(<App client={client} initialPapers={[runningPaper]} />);
+
+    await user.click(screen.getByRole("button", { name: /打开 paperflow/i }));
+
+    expect(screen.getAllByText(/DeepSeek 正在生成阅读报告/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/文本已抽取/)).toBeInTheDocument();
+    expect(screen.getByText(/请求已组装/)).toBeInTheDocument();
+    expect(screen.getAllByText(/模型 deepseek-v4-flash/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/超时 90s/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/timeout 90s/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/将处理 PDF 文本 48.2k 字符/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/已覆盖 PDF 全文 48.2k 字符/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/报告可能不完整/)).not.toBeInTheDocument();
+  });
+
   it("imports an arXiv link and opens the report after download completes", async () => {
     const user = userEvent.setup();
     const arxivPaper: Paper = {
@@ -500,7 +677,7 @@ describe("Paperflow app", () => {
         mode: "deepseek",
         model: "deepseek-v4-flash",
         model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
-        report_read_timeout: 45,
+        report_read_timeout: 90,
       }),
       updateAgentConfig: vi.fn().mockResolvedValue({
         configured: true,
@@ -514,7 +691,7 @@ describe("Paperflow app", () => {
 
     render(<App client={client} />);
 
-    expect(await screen.findByText(/deepseek-v4-flash · 45s/)).toBeInTheDocument();
+    expect(await screen.findByText(/deepseek-v4-flash · 90s/)).toBeInTheDocument();
     await user.click(screen.getByText(/^Agent 配置$/i));
     await user.click(await screen.findByRole("button", { name: /Pro/i }));
     const timeoutInput = screen.getByLabelText(/报告超时/i);
@@ -542,7 +719,7 @@ describe("Paperflow app", () => {
         mode: "missing-key",
         model: null,
         model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
-        report_read_timeout: 45,
+        report_read_timeout: 90,
       }),
       updateAgentConfig: vi.fn().mockResolvedValue({
         configured: true,
@@ -550,7 +727,7 @@ describe("Paperflow app", () => {
         mode: "deepseek",
         model: "deepseek-v4-flash",
         model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
-        report_read_timeout: 45,
+        report_read_timeout: 90,
       }),
     });
 
@@ -563,7 +740,7 @@ describe("Paperflow app", () => {
     expect(client.updateAgentConfig).toHaveBeenCalledWith({
       api_key: "sk-local-test",
       model: "",
-      report_read_timeout: 45,
+      report_read_timeout: 90,
     });
     expect(screen.queryByDisplayValue("sk-local-test")).not.toBeInTheDocument();
   });
@@ -582,7 +759,12 @@ function fakeClient(overrides: Partial<PaperflowClient> = {}): PaperflowClient {
     getReport: vi.fn(),
     askPaper: vi.fn(),
     askSelection: vi.fn(),
+    listChats: vi.fn().mockResolvedValue([]),
+    getChat: vi.fn(),
     chatPaper: vi.fn(),
+    streamChatPaper: vi.fn().mockImplementation(async (_paperId, _payload, onEvent) => {
+      onEvent({ event: "final", data: { chat_response: await Promise.resolve(reportChatResponse()) } });
+    }),
     getChunks: vi.fn().mockResolvedValue({ chunks: [], page_sizes: [] }),
     pdfUrl: vi.fn().mockReturnValue("http://127.0.0.1:8000/api/papers/paper-1/pdf"),
     runR1Search: vi.fn().mockResolvedValue({ items: [], query_trace: [] }),
@@ -607,9 +789,23 @@ function fakeClient(overrides: Partial<PaperflowClient> = {}): PaperflowClient {
       mode: "injected",
       model: null,
       model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
-      report_read_timeout: 45,
+      report_read_timeout: 90,
     }),
     updateAgentConfig: vi.fn(),
     ...overrides,
+  };
+}
+
+function reportChatResponse() {
+  return {
+    id: "chat-paper-1",
+    paper_id: "paper-1",
+    status: "completed",
+    steps: [{ id: "read-report", label: "Read report", status: "completed" }],
+    messages: [
+      { id: "user-chat", role: "user", content: "question" },
+      { id: "assistant-chat", role: "assistant", content: "answer", reliability: "R0", evidence: [] },
+    ],
+    answer: { id: "answer-chat", text: "answer", reliability: "R0", evidence: [] },
   };
 }

@@ -73,6 +73,10 @@ class AgentRunMetrics(BaseModel):
     prompt_tokens: Optional[int] = None
     completion_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
+    covered_chars: Optional[int] = None
+    total_chars: Optional[int] = None
+    coverage_percent: Optional[float] = None
+    chunks_processed: Optional[int] = None
 
 
 class ReadingReport(BaseModel):
@@ -113,6 +117,8 @@ class PaperChatResponse(BaseModel):
     id: str
     paper_id: str
     status: str = "completed"
+    task_id: Optional[str] = None
+    used_context: List[str] = Field(default_factory=list)
     steps: List[PaperChatStep] = Field(default_factory=list)
     messages: List[PaperChatMessage] = Field(default_factory=list)
     answer: Claim
@@ -261,6 +267,11 @@ class FieldMapGraphEdge(BaseModel):
     source: str
     target: str
     relation: str = "precedes"
+    source_type: str = "rule"  # "rule" | "agent_suggested" | "user"
+    rationale: Optional[str] = None
+    evidence: List[Evidence] = Field(default_factory=list)
+    confidence: Optional[float] = None
+    user_confirmed: Optional[bool] = None
 
 
 class FieldMapRelationshipGraph(BaseModel):
@@ -319,6 +330,7 @@ class ResearchInsightReport(BaseModel):
 
 class AgentTaskKind(str, Enum):
     REPORT = "report"
+    CHAT = "chat"
     R1_SEARCH = "r1_search"
     FIELD_MAP = "field_map"
     COMPARE = "compare"

@@ -1,11 +1,13 @@
 <div align="center">
 
-# PaperFlow
+<img src="./assets/paperflow_banner.png" alt="Paperflow banner" width="720" />
+
+# Paperflow
 
 **Evidence-first paper reading + citation-aware search + field map + Obsidian knowledge base.**
 
 A local-first paper-reading workbench for AI researchers and engineers.
-Powered by DeepSeek-backed agents — every claim is graded **R0 / R1 / R2** and can be traced back to the PDF.
+Powered by DeepSeek-backed agents, every generated claim is graded **R0 / R1 / R2** and traced back to the paper whenever possible.
 
 [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-red.svg)](./LICENSE)
 [![Research-only](https://img.shields.io/badge/use-research%20only-orange.svg)](./LICENSE)
@@ -19,7 +21,7 @@ Powered by DeepSeek-backed agents — every claim is graded **R0 / R1 / R2** and
 
 ---
 
-## Why PaperFlow
+## Why Paperflow
 
 Reading papers is not a one-shot summarization task. It is a continuous workflow of:
 
@@ -28,78 +30,49 @@ Reading papers is not a one-shot summarization task. It is a continuous workflow
 - walking out from one paper to its references, cited-by and related work,
 - saving the result into a personal knowledge base you can keep extending.
 
-**PaperFlow turns that workflow into a local-first, evidence-graded research IDE.**
+Paperflow turns that workflow into a local-first, evidence-graded research IDE.
 
 It is opinionated:
 
 - **Report first, chat second.** You open a paper and see a structured Reading Report, not a blank chatbox.
-- **Every claim is graded.** R0 = grounded in the current paper, R1 = grounded in external papers, R2 = inference / opinion. The grade is a first-class citizen of the UI, the data model, and the Obsidian export.
-- **Evidence is the product.** Every fact tries to carry a quote, page and section — and tries to jump back into the PDF.
-- **Local-first knowledge base.** PDFs, report JSON, and Markdown notes live on your disk and sync to an Obsidian-friendly vault.
+- **Every claim is graded.** R0 = grounded in the current paper, R1 = grounded in external papers, R2 = inference / opinion.
+- **Evidence is the product.** Every fact tries to carry a quote, page and section, and can jump back into the PDF when location data is available.
+- **Local-first by default.** PDFs, report JSON, SQLite metadata, and Obsidian notes live on your disk.
 
 ---
 
-## Status
+## Core Features
 
-PaperFlow currently ships **two front-ends** on top of the same V1.1 backend agent harness:
+### Dynamic Reading Reports
 
-- **Web** — React + Vite + TypeScript, two-column Report-first Workspace.
-- **TUI** — Textual + httpx, keyboard-driven, same Library / Workspace / R0-R1-R2 / Evidence / Q&A / Obsidian flow inside your terminal.
+- **Chunked full-paper reading**: long PDFs are split into bounded chunks instead of being summarized from only the first text window.
+- **Dynamic partial reports**: the first completed chunk is saved immediately, so readers can see key findings before the whole paper finishes.
+- **Coverage-aware generation**: the UI shows progress such as `覆盖全文 50%`, then `覆盖全文 100% · 8 chunks` when all chunks are covered.
+- **Live parsing metrics**: elapsed time keeps ticking while generation is running; tokens, coverage, and chunk count update as new partial reports arrive.
+- **Transparent process output**: the Workspace shows PDF text extraction, DeepSeek request preparation, model wait, chunk coverage, report persistence, and failure states.
 
-V1.1 workbench features:
+### Evidence-First Workspace
 
-- Library-first home with status tracking (`queued` → `processing` → `completed` / `failed`)
-- DeepSeek-backed PaperAgent generating R0 Reading Reports
-- R0 / R1 / R2 reliability badges in UI and data model
-- Evidence quote, page and section per claim
-- Two-column Report-first Workspace with Evidence Detail side panel
-- Background agent task (no UI blocking on import)
-- Persistent report — survives backend restart
-- Obsidian-native paper note (frontmatter, wikilinks, callouts, reliability tags)
-- Focused Q&A around dataset / benchmark / method / compute / limitations
+- R0 / R1 / R2 reliability badges in the UI and data model.
+- Evidence quote, page, section, bbox, and `location_status` for claims when available.
+- PDF.js reader with page jump, bbox highlight, and select-to-ask.
+- Right-side evidence detail panel for selected claims.
+- Obsidian-native Markdown export with frontmatter, wikilinks, callouts, and reliability tags.
 
-V2 progress (in active rollout):
+### Agent Conversation
 
-- [x] **Phase 2 — Metadata & Import**: real `authors / year / venue / DOI / arXiv ID` populated via arXiv, CrossRef, Semantic Scholar, OpenReview APIs; new `POST /api/papers/import-url` auto-detects source; read-only Zotero importer (`POST /api/papers/import-zotero`); content-hash + DOI + arXiv-ID dedup; metadata chips on Library cards (web + TUI)
-- [x] **Phase 1 — Evidence Workflow**: PyMuPDF block-level parser with section guesses; `EvidenceVerifier` fuzzy-matches every agent quote to page + bbox + `location_status`; PDF.js viewer with page jump, bbox highlight, and select-to-ask; TUI evidence panel surfaces bbox + status; new endpoints `GET /api/papers/{id}/pdf`, `GET /api/papers/{id}/chunks`, `POST /api/papers/{id}/ask-selection`
-- [x] **Phase 3 — Real R1 Search**: six-lane pipeline (seed → backward → forward → benchmark → survey → recent) over Semantic Scholar Graph API, OpenAlex (fallback), and Papers with Code, plus a regex-based local references parser; each candidate carries author / year / venue / DOI / arXiv / citation counts and a `comparison_risk` note; new endpoints `POST /api/papers/{id}/r1-search` and `GET /api/papers/{id}/related`; web and TUI show a richer Related Work panel with the per-lane query trace.
-- [x] **Phase 4 — Field Map**: heuristic Milestone Agent scores R1 candidates on citations / velocity / venue / category, Timeline aggregator orders milestones + follow-ups chronologically, Field Map aggregator yields task taxonomy, datasets/benchmarks, metrics, method families, open problems (from R0 limitations), recent trends (R2) and research opportunities (R2); new endpoints `POST /api/field-maps`, `GET /api/field-maps/{id}`, `POST /api/field-maps/{id}/rerun`, `GET /api/field-maps`; web Workspace gains a Field Map section, TUI gets a dedicated Field Map screen (`2` to open).
-- [x] **Phase 5 — Compare + R2 + Cancel/Retry/Resume**: `POST /api/compare` pivots two or more papers across Task / Dataset / Benchmark / Method / Compute / Result / Limitations / Availability with per-cell evidence and per-row `comparison_risk`; `POST /api/field-maps/{id}/insights` runs the Research Insight Agent (R2 only — trends, opportunities, method-angle, story, writing-scaffold); `POST /api/field-maps/{id}/export-obsidian` writes a `#milestone` / `#R2`-tagged note for the field map; new task queue (`GET /api/tasks`, `GET /api/tasks/{id}`, `POST /api/tasks/{id}/cancel`, `POST /api/tasks/{id}/retry`) persists status snapshots, recovers them on restart (any `running` task is flipped to `failed` so you can retry), and supports cooperative cancellation via a shared `threading.Event`.
+- A formal right-rail Agent panel with transcript, process cards, status, and composer.
+- `POST /api/papers/{paper_id}/chat` returns structured steps, messages, reliability, answer claim, and evidence.
+- Selected claim/evidence/page/quote can be passed into the Agent chat so answers stay grounded in the current report.
+- Runtime Agent configuration in the web UI: update local DeepSeek API key, switch model, and change report timeout.
 
----
+### Literature Context And Field Maps
 
-## Architecture
-
-PaperFlow ships two front-ends sharing the same backend agent harness:
-
-```text
-┌──────────────────────────────┐                ┌──────────────────────────────────┐
-│  Web Frontend (React + Vite) │                │  Backend (FastAPI)               │
-│  - Library-first home        │ ─── REST ───► │  - PaperStorage (SQLite + files) │
-│  - Report-first Workspace    │                │  - PDF parser (PyMuPDF)          │
-│  - Reliability badges        │                │  - ReportService                 │
-│  - Evidence Detail panel     │                │  - PaperAgent (DeepSeek client)  │
-│  - Focused Q&A               │                │  - Obsidian-native renderer      │
-└──────────────────────────────┘                └──────────────┬───────────────────┘
-                                                               │
-┌──────────────────────────────┐                               │
-│  TUI (Textual + httpx)       │ ─── REST ────────────────────►│
-│  - Same Library + Workspace  │                               │
-│  - R0/R1/R2 badges in terminal│                              │
-│  - Keyboard-driven           │                               │
-└──────────────────────────────┘                               ▼
-                                                 ┌──────────────────────────┐
-                                                 │  Local Data (paperflow_data/)
-                                                 │  - PDFs                  │
-                                                 │  - report JSON           │
-                                                 │  - Obsidian vault notes  │
-                                                 │  - SQLite metadata       │
-                                                 └──────────────────────────┘
-```
-
-The agent harness — PaperAgent + ReportService + DeepSeekClient — lives only in the backend, just like the `app-server` / `tui` separation in [DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI). Both the web frontend and the TUI are thin HTTP clients.
-
-**Tech stack:** Python 3.9+ · FastAPI · Pydantic · PyMuPDF · httpx · pytest · React · TypeScript · Vite · Vitest · Textual · Rich · SQLite · DeepSeek API.
+- Metadata import via arXiv, CrossRef, Semantic Scholar, OpenReview, and Zotero.
+- Content-hash + DOI + arXiv-ID deduplication.
+- Six-lane R1 search: seed, backward, forward, benchmark, survey, and recent.
+- Field Map generation: milestones, timeline, task taxonomy, datasets, benchmarks, method families, open problems, trends, and R2 opportunities.
+- Multi-paper comparison and R2 research insights with Obsidian export.
 
 ---
 
@@ -107,28 +80,20 @@ The agent harness — PaperAgent + ReportService + DeepSeekClient — lives only
 
 > Requirements: Python 3.9+, Node.js 18+, and a DeepSeek API key for real Agent parsing.
 
-### 1. Clone
+### Fastest Path
 
 ```bash
 git clone https://github.com/shiml20/PaperFlow.git
 cd PaperFlow
-```
 
-### 2. Fastest API Setup (DeepSeek)
-
-PaperFlow currently supports DeepSeek as the Agent API provider. The fastest path
-for a new user is to export one environment variable before starting the app:
-
-```bash
 export DEEPSEEK_API_KEY="your-deepseek-api-key"
 cd paperflow
 ./run-dev.sh --install
 ```
 
-Then open `http://127.0.0.1:5173`, import a PDF or arXiv URL, and wait for the
-Reading Report to finish.
+Then open `http://127.0.0.1:5173`, import a PDF or arXiv URL, and open the Workspace.
 
-If dependencies are already installed, use:
+If dependencies are already installed:
 
 ```bash
 export DEEPSEEK_API_KEY="your-deepseek-api-key"
@@ -136,25 +101,59 @@ cd paperflow
 ./run-dev.sh
 ```
 
-### 3. DeepSeek Configuration
+### Manual Backend
 
-The backend reads DeepSeek credentials from the environment first, then falls
-back to a config file:
+```bash
+cd paperflow/backend
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e '.[dev]'
+
+export DEEPSEEK_API_KEY="your-key"
+export DEEPSEEK_MODEL="deepseek-v4-flash"
+export DEEPSEEK_REPORT_READ_TIMEOUT="90"
+
+uvicorn app.main:app --reload
+```
+
+### Manual Web Frontend
+
+```bash
+cd paperflow/frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`.
+
+### Typical Workflow
+
+1. Import a local PDF or paste an arXiv URL.
+2. Watch the Agent move from PDF parsing to dynamic partial reports.
+3. Read the first key findings while the report continues to fill in.
+4. Open the completed Reading Report and inspect R0 / R1 / R2 claims.
+5. Click a claim to inspect evidence in the right rail.
+6. Ask focused Agent questions grounded in the selected claim or evidence.
+7. Save or update the Obsidian note.
+
+---
+
+## DeepSeek Configuration
+
+Paperflow currently supports DeepSeek as the Agent API provider.
+The backend reads credentials in this order:
 
 1. `DEEPSEEK_API_KEY` environment variable.
 2. `api_key` in the config file.
 
-The config file path is `DEEPSEEK_CONFIG_PATH` when set, otherwise
-`~/.deepseek/config.toml`.
-
-Supported environment variables:
+The config file path is `DEEPSEEK_CONFIG_PATH` when set, otherwise `~/.deepseek/config.toml`.
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | Yes | none | DeepSeek API key used by the backend PaperAgent. |
 | `DEEPSEEK_BASE_URL` | No | `https://api.deepseek.com/beta` | DeepSeek-compatible chat completions endpoint root. |
 | `DEEPSEEK_MODEL` | No | `deepseek-v4-flash` | Model used for Reading Report generation. |
-| `DEEPSEEK_REPORT_READ_TIMEOUT` | No | `45` | Read timeout in seconds for report generation. Increase this for long PDFs or slow model responses. |
+| `DEEPSEEK_REPORT_READ_TIMEOUT` | No | `90` | Read timeout in seconds for report generation. Increase this for long PDFs or slow model responses. |
 | `DEEPSEEK_CONFIG_PATH` | No | `~/.deepseek/config.toml` | Alternate config file path. |
 
 Example config file:
@@ -165,68 +164,51 @@ base_url = "https://api.deepseek.com/beta"
 model = "deepseek-v4-flash"
 ```
 
-`default_text_model` is also accepted as a fallback model key for compatibility
-with existing DeepSeek config files.
+`default_text_model` from older DeepSeek-TUI config files is ignored for Paperflow's report model. This keeps the Paperflow default on `deepseek-v4-flash` unless `DEEPSEEK_MODEL` or `model` is set explicitly.
 
-Without a DeepSeek key, the backend reports `Agent not configured` and cannot
-produce a real R0/R1 Reading Report.
+Without a DeepSeek key, the backend reports `Agent not configured` and cannot produce a real R0/R1 Reading Report.
 
-### 4. Backend
+---
 
-```bash
-cd paperflow/backend
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e '.[dev]'
+## Architecture
 
-# Enable the real DeepSeek-backed PaperAgent
-export DEEPSEEK_API_KEY="your-key"
-export DEEPSEEK_MODEL="deepseek-v4-flash"
-# Optional for long PDFs or slow model responses
-export DEEPSEEK_REPORT_READ_TIMEOUT="90"
+Paperflow ships two front-ends sharing the same backend agent harness:
 
-uvicorn app.main:app --reload
+```text
+┌──────────────────────────────┐                ┌──────────────────────────────────┐
+│  Web Frontend (React + Vite) │                │  Backend (FastAPI)               │
+│  - Library-first home        │ ─── REST ───► │  - PaperStorage (SQLite + files) │
+│  - Report-first Workspace    │                │  - PDF parser (PyMuPDF)          │
+│  - Agent rail + evidence     │                │  - ReportService                 │
+│  - PDF viewer                │                │  - PaperAgent (DeepSeek client)  │
+└──────────────────────────────┘                └──────────────┬───────────────────┘
+                                                               │
+┌──────────────────────────────┐                               │
+│  TUI (Textual + httpx)       │ ─── REST ────────────────────►│
+│  - Same Library + Workspace  │                               │
+│  - R0/R1/R2 badges           │                               │
+│  - Keyboard-driven           │                               │
+└──────────────────────────────┘                               ▼
+                                                 ┌──────────────────────────┐
+                                                 │  Local Data              │
+                                                 │  - PDFs                  │
+                                                 │  - report JSON           │
+                                                 │  - Obsidian vault notes  │
+                                                 │  - SQLite metadata       │
+                                                 └──────────────────────────┘
 ```
 
-Run the backend tests:
+The agent harness lives only in the backend. Both the web frontend and the TUI are thin HTTP clients.
+
+**Tech stack:** Python 3.9+ · FastAPI · Pydantic · PyMuPDF · httpx · pytest · React · TypeScript · Vite · Vitest · Textual · Rich · SQLite · DeepSeek API.
+
+---
+
+## TUI
+
+Paperflow also ships a Textual-based terminal UI that talks to the same backend.
 
 ```bash
-cd paperflow/backend
-. .venv/bin/activate
-pytest -q
-```
-
-### 5. Web Frontend
-
-```bash
-cd paperflow/frontend
-npm install
-npm run dev
-```
-
-Run the frontend tests:
-
-```bash
-cd paperflow/frontend
-npm test
-```
-
-Open `http://localhost:5173` in your browser, then:
-
-1. Click **Import PDF** or paste an arXiv URL.
-2. Wait for the Agent task to move from `processing` → `completed`.
-3. Open the paper to see the two-column Report-first Workspace.
-4. Click any claim to see its evidence in the right panel.
-5. Ask a focused question — the answer is still graded R0 / R1 / R2.
-6. Click **Save Obsidian Note** to drop a Markdown file into the local vault.
-
-### 6. TUI (Terminal UI)
-
-If you prefer a keyboard-driven workflow, PaperFlow ships a Textual-based TUI
-that talks to the same backend.
-
-```bash
-# Install into the backend's venv (TUI shares httpx with the backend)
 cd paperflow/backend && . .venv/bin/activate
 pip install -e ../tui
 
@@ -238,63 +220,49 @@ PAPERFLOW_BASE_URL=http://127.0.0.1:8000 paperflow-tui
 python -m paperflow_tui
 ```
 
-Keyboard bindings:
+Useful bindings:
 
 | Where | Key | Action |
 | --- | --- | --- |
 | Library | `i` | Import a local PDF |
 | Library | `a` | Import an arXiv URL / ID |
 | Library | `o` / `Enter` | Open the selected paper's Workspace |
-| Library | `r` | Re-run the PaperAgent on a paper |
+| Library | `r` | Re-run the PaperAgent |
 | Library | `R` | Refresh library + agent status |
-| Library | `q` | Quit |
-| Workspace | `j` / `k` / `↑` / `↓` | Navigate claims in the Reading Report tree |
-| Workspace | `Enter` | Inspect a claim's evidence on the right panel |
-| Workspace | `a` | Ask a focused question — answer is graded R0 / R1 / R2 |
-| Workspace | `c` | Copy the selected claim's quote to the clipboard |
-| Workspace | `1` | Run the six-lane R1 related-work search |
-| Workspace | `2` | Open the Field Map screen (milestones / timeline / open problems) |
-| Field Map | `g` | Generate or re-run the Field Map for this paper |
-| Field Map | `i` | Generate R2 Research Insights |
-| Field Map | `o` | Save the Field Map Obsidian note |
-| Field Map | `b` / `Esc` | Back to Workspace |
-| Workspace | `s` | Save / update the Obsidian note |
-| Workspace | `r` | Re-run agent for this paper |
+| Workspace | `j` / `k` / arrows | Navigate claims |
+| Workspace | `Enter` | Inspect evidence |
+| Workspace | `a` | Ask a focused R0 / R1 / R2 question |
+| Workspace | `1` | Run R1 related-work search |
+| Workspace | `2` | Open Field Map |
+| Workspace | `s` | Save / update Obsidian note |
 | Workspace | `b` / `Esc` | Back to Library |
-
-Run the TUI client tests (uses `respx` to mock the backend):
-
-```bash
-cd paperflow/tui
-pytest -q
-```
 
 ---
 
-## Reliability Model (R0 / R1 / R2)
+## Reliability Model
 
 | Level | Meaning | Examples |
 | --- | --- | --- |
-| **R0** | Strictly grounded in the current paper. Numbers must not be inferred or compared across settings. | "The model is trained on 8×A100 for 72 hours." |
-| **R1** | Grounded in another paper / source, fetched through external search. The source paper, venue, year and URL must be recorded. | "This benchmark was introduced in *paper X (NeurIPS 2024)*." |
-| **R2** | Inference, trend judgement, or research opinion. Always shown with an R2 badge. | "This direction is likely to converge with diffusion priors in the next year." |
+| **R0** | Strictly grounded in the current paper. Numbers must not be inferred or compared across settings. | "The model is trained on 8xA100 for 72 hours." |
+| **R1** | Grounded in another paper / source fetched through external search. Source paper, venue, year, and URL should be recorded. | "This benchmark was introduced in paper X." |
+| **R2** | Inference, trend judgement, or research opinion. Always shown with an R2 badge. | "This direction is likely to converge with diffusion priors." |
 
-Reliability is not just metadata. It is rendered as a UI badge, persisted in JSON, embedded as `#R0` / `#R1` / `#R2` tags in the Obsidian note, and enforced inside the PaperAgent prompt contract.
+Reliability is rendered as a UI badge, persisted in JSON, embedded as `#R0` / `#R1` / `#R2` tags in Obsidian notes, and enforced inside the PaperAgent prompt contract.
 
 ---
 
-## Reading Report Schema (R0)
+## Reading Report Schema
 
-Every R0 claim looks like:
+Every R0 claim follows this shape:
 
 ```json
 {
   "id": "claim-id",
   "text": "中文解释 / English explanation",
   "reliability": "R0",
-  "source": "current_paper",
   "evidence": [
     {
+      "source": "paper.pdf",
       "quote": "verbatim quote from the PDF",
       "page": 3,
       "section": "Method",
@@ -302,16 +270,11 @@ Every R0 claim looks like:
       "location_status": "page_and_quote"
     }
   ],
-  "uncertainty": null,
-  "numeric_strictness": {
-    "contains_number": true,
-    "setting": "dataset / benchmark / metric",
-    "comparison_risk": null
-  }
+  "uncertainty": null
 }
 ```
 
-A full Reading Report covers: paper metadata, executive summary, task, dataset, benchmark/metric, method, model scale, input/output, compute/training, key results, strengths, limitations, related-work claims, theory/methodology insights, and an evidence index.
+A full Reading Report covers paper metadata, executive summary, task, dataset, benchmark/metric, method, model scale, input/output, compute/training, key results, strengths, limitations, related-work claims, and an evidence index.
 
 ---
 
@@ -319,78 +282,76 @@ A full Reading Report covers: paper metadata, executive summary, task, dataset, 
 
 ```text
 PaperFlow/
-├── README.md                            ← you are here
-├── LICENSE                              ← MIT
-├── .gitignore
-└── paperflow/                           ← runnable V1.1 implementation
-    ├── README.md
+├── README.md
+├── LICENSE
+├── assets/
+│   └── paperflow_banner.png
+├── design_docs/                         ← local design / PRD notes, not required at runtime
+└── paperflow/
+    ├── run-dev.sh                       ← starts backend + frontend
     ├── backend/                         ← FastAPI + PaperAgent harness
-    │   ├── app/                         ← models, storage, report service, agent, obsidian
-    │   ├── tests/                       ← pytest
+    │   ├── app/
+    │   ├── tests/
     │   └── pyproject.toml
     ├── frontend/                        ← React + Vite + TypeScript web client
-    │   ├── src/                         ← App, API client, types, components
-    │   ├── public/
+    │   ├── src/
     │   └── package.json
-    └── tui/                             ← Textual + httpx terminal client
-        ├── paperflow_tui/               ← app, client, screens, styles.tcss
-        ├── tests/                       ← respx-mocked client tests
-        └── pyproject.toml
+    └── tui/                             ← Textual terminal client
+        ├── paperflow_tui/
+        └── tests/
 ```
 
-User data (PDFs, generated reports, Obsidian vault) is stored under `paperflow/backend/paperflow_data/` and is git-ignored by default — your library never leaks into the repo.
+User data is stored under `paperflow/backend/paperflow_data/` and is git-ignored by default.
 
 ---
 
-## Configuration
+## Testing
 
-PaperFlow reads its DeepSeek configuration in this order:
+```bash
+# Backend
+cd paperflow/backend
+. .venv/bin/activate
+pytest -q
 
-1. Environment variables — `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, `DEEPSEEK_BASE_URL`.
-2. A TOML config at `DEEPSEEK_CONFIG_PATH` (if set).
-3. The standard DeepSeek-TUI config at `~/.deepseek/config.toml`.
+# Frontend
+cd ../frontend
+npm test
+npm run build
 
-If none of those provide a key, the backend reports `agent.status = "missing-key"` and the UI surfaces an **Agent not configured** banner. The development fallback is intentionally limited so users cannot mistake stub data for real R0 extraction.
+# TUI
+cd ../tui
+pytest -q
+```
 
 ---
 
 ## Contributing
 
-PaperFlow is early but the contract is stable. Good first contributions:
+Paperflow is early, but the reliability contract is stable. Good first contributions:
 
-- Improve PDF parsing fidelity (sections, tables, references).
-- Wire one of the external sources (Semantic Scholar, OpenAlex, Papers with Code) end-to-end.
-- Extend the Obsidian renderer (Field Map note, R2 callout, citation graph links).
-- Add end-to-end tests for the import → report → focused-question → Obsidian flow.
+- Improve PDF parsing fidelity for sections, tables, references, and equations.
+- Add stronger evidence-location checks and PDF highlighting.
+- Extend the Obsidian renderer for Field Maps, R2 callouts, and citation graph links.
+- Add end-to-end tests for import -> report -> Agent chat -> Obsidian export.
 
-Before opening a PR:
-
-```bash
-# Backend
-cd paperflow/backend && . .venv/bin/activate && pytest -q
-
-# Frontend
-cd paperflow/frontend && npm test
-```
-
-Please keep PRs aligned with the reliability contract: every UI surface that produces a fact must be expressible as R0 / R1 / R2 with evidence.
+Please keep PRs aligned with the reliability contract: every UI surface that produces a fact should be expressible as R0 / R1 / R2 with evidence.
 
 ---
 
 ## License
 
-PaperFlow is released under the [**PolyForm Noncommercial License 1.0.0**](./LICENSE).
+Paperflow is released under the [**PolyForm Noncommercial License 1.0.0**](./LICENSE).
 
 This means:
 
-- **You may freely use, copy, modify, and distribute PaperFlow** for any **noncommercial** purpose — including academic research, teaching, personal study, hobby projects, and use inside charitable, educational, government, or public research organizations.
-- **You may not use PaperFlow for any commercial purpose** — including but not limited to: hosting it as a paid service, embedding it inside a commercial product, or using it as part of a for-profit company's internal tooling — without a separate commercial license.
-- Forks and derivative works must keep this license and the `Required Notice` line that appears at the top of [`LICENSE`](./LICENSE).
-- The software is provided **as is**, without warranty of any kind.
+- You may freely use, copy, modify, and distribute Paperflow for any noncommercial purpose, including academic research, teaching, personal study, hobby projects, and use inside charitable, educational, government, or public research organizations.
+- You may not use Paperflow for any commercial purpose, including hosting it as a paid service, embedding it inside a commercial product, or using it as part of a for-profit company's internal tooling, without a separate commercial license.
+- Forks and derivative works must keep this license and the `Required Notice` line in [`LICENSE`](./LICENSE).
+- The software is provided as is, without warranty of any kind.
 
-If you would like to use PaperFlow commercially, please open an issue on the [GitHub repository](https://github.com/shiml20/PaperFlow) to discuss a commercial license.
+For commercial use, please open an issue on the [GitHub repository](https://github.com/shiml20/PaperFlow) to discuss a commercial license.
 
-Copyright © 2026 shiml20 and PaperFlow contributors.
+Copyright © 2026 shiml20 and Paperflow contributors.
 
 ---
 
@@ -400,4 +361,53 @@ Copyright © 2026 shiml20 and PaperFlow contributors.
 - PDF parsing is powered by [PyMuPDF](https://github.com/pymupdf/PyMuPDF).
 - The frontend is built with [Vite](https://vitejs.dev/) and [React](https://react.dev/).
 
-If PaperFlow is useful to your research workflow, a star is the kindest signal.
+If Paperflow is useful to your research workflow, a star is the kindest signal.
+
+---
+
+## Status
+
+Paperflow currently ships two front-ends on top of the same backend agent harness:
+
+- **Web**: React + Vite + TypeScript, report-first Workspace, PDF viewer, Agent rail, and Obsidian export.
+- **TUI**: Textual + httpx, keyboard-driven Library / Workspace / R0-R1-R2 / Evidence / Q&A flow.
+
+### V1.1
+
+- [x] Library-first home with status tracking (`queued` -> `processing` -> `completed` / `failed`)
+- [x] DeepSeek-backed PaperAgent generating R0 Reading Reports
+- [x] R0 / R1 / R2 reliability badges in UI and data model
+- [x] Evidence quote, page, and section per claim
+- [x] Background agent task with persistent reports
+- [x] Obsidian-native paper note export
+- [x] Focused Q&A around dataset / benchmark / method / compute / limitations
+
+### V2
+
+- [x] **Evidence Workflow**: PyMuPDF block parser, evidence verification, PDF.js page jump, bbox highlight, and select-to-ask.
+- [x] **Metadata & Import**: arXiv, CrossRef, Semantic Scholar, OpenReview, Zotero, and DOI/arXiv/content-hash deduplication.
+- [x] **Real R1 Search**: six-lane related-work search over Semantic Scholar, OpenAlex fallback, Papers with Code, and local references.
+- [x] **Field Map**: milestones, timeline, task taxonomy, datasets, benchmarks, method families, open problems, trends, and R2 opportunities.
+- [x] **Compare + R2 + Task Queue**: multi-paper compare, research insights, Field Map Obsidian export, cancel/retry/resume task APIs.
+
+### V3
+
+- [x] Formal Agent Conversation rail replacing the old focused Q&A area.
+- [x] Paper-scoped chat API: `POST /api/papers/{paper_id}/chat`.
+- [x] Evidence-aware chat inputs: selected claim, evidence, page, quote, and section.
+- [x] Right-rail information architecture for Agent status, config, evidence, chat, and Obsidian export.
+
+### V3.5
+
+- [x] Chunked full-paper Reading Reports over bounded DeepSeek chunks.
+- [x] Dynamic partial reports so the first key findings appear before full completion.
+- [x] Coverage-aware UI such as `覆盖全文 50%` and `覆盖全文 100% · 8 chunks`.
+- [x] Live parsing metrics while generation is still running.
+- [x] Transparent Agent progress for extraction, request preparation, model wait, coverage, and persistence.
+- [x] Runtime Agent configuration for local API key, model, and report timeout.
+- [x] Persist Agent chat threads in SQLite and restore the latest transcript when the Workspace opens.
+- [x] Upgrade chat answers to a DeepSeek-backed chat agent over report + selected evidence + R1 cache, with a report-grounded fallback.
+- [x] Surface report and chat work through the task lifecycle; report import/rerun now runs through the task queue wrapper and chat records completed task snapshots.
+- [x] Add SSE streaming for Agent chat step/final events, with frontend stream consumption and final transcript sync.
+- [x] Deepen PDF evidence interactions: evidence detail can open the PDF viewer, jump to the evidence page, and reuse bbox highlights when available.
+- [x] Add Agent-enriched Field Map / lineage graph edges with source type, rationale, confidence, and UI labels that distinguish Agent suggestions from rule-derived relations.

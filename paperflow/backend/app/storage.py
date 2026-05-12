@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import sqlite3
+import time
 import uuid
 from pathlib import Path
 from typing import List, Optional
@@ -13,8 +14,13 @@ from app.metadata import dedup_key_from_metadata
 from app.models import (
     ImportSourceType,
     Paper,
+    PaperChatMessage,
+    PaperChatResponse,
+    PaperChatStep,
     PaperMetadata,
     PaperSession,
+    Claim,
+    ReliabilityLevel,
     ReadingReport,
     TaskStatus,
 )
@@ -348,6 +354,133 @@ class PaperStorage:
             raise FileNotFoundError(paper_id)
         return ReadingReport.model_validate_json(report_path.read_text(encoding="utf-8"))
 
+    # --------------------------------------------------------------- chat
+
+    def default_chat_id(self, paper_id: str) -> str:
+        return f"chat-{paper_id}"
+
+    def list_chats(self, paper_id: str) -> List[PaperChatResponse]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "select id from paper_chats where paper_id = ? order by updated_at desc",
+                (paper_id,),
+            ).fetchall()
+        return [self.load_chat(paper_id, row["id"]) for row in rows]
+
+    def load_chat(self, paper_id: str, chat_id: str) -> PaperChatResponse:
+        with self._connect() as conn:
+            chat = conn.execute(
+                "select id, paper_id from paper_chats where id = ? and paper_id = ?",
+                (chat_id, paper_id),
+            ).fetchone()
+            if chat is None:
+                raise FileNotFoundError(chat_id)
+            message_rows = conn.execute(
+                """
+                select id, role, content, reliability, evidence_json, uncertainty
+                from paper_chat_messages
+                where chat_id = ?
+                order by created_at asc
+                """,
+                (chat_id,),
+            ).fetchall()
+            step_rows = conn.execute(
+                """
+                select id, label, status, detail
+                from paper_chat_steps
+                where chat_id = ?
+                order by updated_at asc, order_index asc
+                """,
+                (chat_id,),
+            ).fetchall()
+
+        messages = [
+            PaperChatMessage(
+                id=row["id"],
+                role=row["role"],
+                content=row["content"],
+                reliability=row["reliability"],
+                evidence=json.loads(row["evidence_json"] or "[]"),
+                uncertainty=row["uncertainty"],
+            )
+            for row in message_rows
+        ]
+        steps = [
+            PaperChatStep(
+                id=row["id"],
+                label=row["label"],
+                status=row["status"],
+                detail=row["detail"],
+            )
+            for row in step_rows
+        ]
+        assistant = next((message for message in reversed(messages) if message.role == "assistant"), None)
+        answer = Claim(
+            id="chat-answer",
+            text=assistant.content if assistant else "",
+            reliability=assistant.reliability or ReliabilityLevel.R2 if assistant else ReliabilityLevel.R2,
+            evidence=assistant.evidence if assistant else [],
+            uncertainty=assistant.uncertainty if assistant else None,
+        )
+        return PaperChatResponse(
+            id=chat_id,
+            paper_id=paper_id,
+            status="completed",
+            steps=steps,
+            messages=messages,
+            answer=answer,
+        )
+
+    def save_chat_turn(self, response: PaperChatResponse, *, turn_id: str) -> PaperChatResponse:
+        now = time.time()
+        title = response.messages[0].content[:80] if response.messages else "Agent chat"
+        with self._connect() as conn:
+            conn.execute(
+                """
+                insert into paper_chats (id, paper_id, title, created_at, updated_at)
+                values (?, ?, ?, ?, ?)
+                on conflict(id) do update set updated_at = excluded.updated_at
+                """,
+                (response.id, response.paper_id, title, now, now),
+            )
+            for message in response.messages[-2:]:
+                conn.execute(
+                    """
+                    insert or replace into paper_chat_messages
+                    (id, chat_id, role, content, reliability, evidence_json, uncertainty, created_at)
+                    values (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        message.id,
+                        response.id,
+                        message.role,
+                        message.content,
+                        message.reliability,
+                        json.dumps([ev.model_dump(mode="json") for ev in message.evidence], ensure_ascii=False),
+                        message.uncertainty,
+                        now,
+                    ),
+                )
+            for index, step in enumerate(response.steps):
+                conn.execute(
+                    """
+                    insert or replace into paper_chat_steps
+                    (id, chat_id, turn_id, label, status, detail, order_index, updated_at)
+                    values (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        f"{turn_id}-{step.id}",
+                        response.id,
+                        turn_id,
+                        step.label,
+                        step.status,
+                        step.detail,
+                        index,
+                        now,
+                    ),
+                )
+        return self.load_chat(response.paper_id, response.id)
+
     # --------------------------------------------------------------- delete
 
     def delete_papers_by_title(self, title: str, pdf_path: Optional[Path] = None) -> None:
@@ -448,6 +581,14 @@ class PaperStorage:
     def _delete_rows(self, conn: sqlite3.Connection, rows: List[sqlite3.Row]) -> None:
         for row in rows:
             conn.execute("delete from sessions where paper_id = ?", (row["id"],))
+            chat_rows = conn.execute(
+                "select id from paper_chats where paper_id = ?",
+                (row["id"],),
+            ).fetchall()
+            for chat in chat_rows:
+                conn.execute("delete from paper_chat_messages where chat_id = ?", (chat["id"],))
+                conn.execute("delete from paper_chat_steps where chat_id = ?", (chat["id"],))
+            conn.execute("delete from paper_chats where paper_id = ?", (row["id"],))
             conn.execute("delete from papers where id = ?", (row["id"],))
             report_path = self.report_dir / f"{row['id']}.json"
             self._unlink_if_exists(report_path)
@@ -573,6 +714,48 @@ class PaperStorage:
             conn.execute("create index if not exists idx_papers_content_hash on papers(content_hash)")
             conn.execute("create index if not exists idx_papers_doi on papers(doi)")
             conn.execute("create index if not exists idx_papers_arxiv_id on papers(arxiv_id)")
+            conn.execute(
+                """
+                create table if not exists paper_chats (
+                    id text primary key,
+                    paper_id text not null,
+                    title text,
+                    created_at real not null,
+                    updated_at real not null
+                )
+                """
+            )
+            conn.execute(
+                """
+                create table if not exists paper_chat_messages (
+                    id text primary key,
+                    chat_id text not null,
+                    role text not null,
+                    content text not null,
+                    reliability text,
+                    evidence_json text,
+                    uncertainty text,
+                    created_at real not null
+                )
+                """
+            )
+            conn.execute(
+                """
+                create table if not exists paper_chat_steps (
+                    id text primary key,
+                    chat_id text not null,
+                    turn_id text not null,
+                    label text not null,
+                    status text not null,
+                    detail text,
+                    order_index integer not null,
+                    updated_at real not null
+                )
+                """
+            )
+            conn.execute("create index if not exists idx_paper_chats_paper on paper_chats(paper_id)")
+            conn.execute("create index if not exists idx_paper_chat_messages_chat on paper_chat_messages(chat_id)")
+            conn.execute("create index if not exists idx_paper_chat_steps_chat on paper_chat_steps(chat_id)")
 
 
 # ----------------------------------------------------------------- helpers
