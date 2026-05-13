@@ -17,7 +17,8 @@ import {
 
 export interface PdfBboxHighlight {
   page: number;
-  bbox: [number, number, number, number]; // [x0, y0, x1, y1] in PDF points
+  bbox?: [number, number, number, number] | null; // [x0, y0, x1, y1] in PDF points
+  quote?: string | null;
 }
 
 interface PdfViewerProps {
@@ -35,6 +36,13 @@ type PdfDocument = import("pdfjs-dist").PDFDocumentProxy;
 type PdfRenderTask = {
   promise: Promise<unknown>;
   cancel?: () => void;
+};
+type HighlightStyle = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  maxHeight?: number;
 };
 
 export function PdfViewer({
@@ -374,6 +382,7 @@ function PdfPage({
   const lastScrolledHighlightKeyRef = useRef<string | null>(null);
   const [renderedSize, setRenderedSize] = useState<{ width: number; height: number } | null>(null);
   const [renderedScale, setRenderedScale] = useState(1);
+  const [textMatchStyle, setTextMatchStyle] = useState<HighlightStyle | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -389,6 +398,7 @@ function PdfPage({
     (async () => {
       try {
         setError(null);
+        setTextMatchStyle(null);
         const pdfPage = await pdfDoc.getPage(pageNumber);
         if (cancelled) return;
         const naturalViewport = pdfPage.getViewport({ scale: 1 });
@@ -426,6 +436,9 @@ function PdfPage({
           textLayer.style.height = `${viewport.height}px`;
           const textContent = await pdfPage.getTextContent();
           if (cancelled) return;
+          if (highlight?.page === pageNumber && !highlight.bbox && highlight.quote) {
+            setTextMatchStyle(findTextHighlightStyle(textContent, highlight.quote, viewport));
+          }
           const renderTextLayer = (pdfModule as unknown as {
             renderTextLayer?: (params: Record<string, unknown>) => unknown;
           }).renderTextLayer;
@@ -453,13 +466,16 @@ function PdfPage({
         // PDF.js can throw if the task has already settled; cleanup should stay silent.
       }
     };
-  }, [containerWidth, maxFitScale, pageNumber, pdfDoc, pdfModule, zoom]);
+  }, [containerWidth, highlight, maxFitScale, pageNumber, pdfDoc, pdfModule, zoom]);
 
-  const highlightStyle = (() => {
+  const highlightStyle: HighlightStyle | null = (() => {
     if (!highlight || highlight.page !== pageNumber || !renderedSize) {
       return null;
     }
-    const [, , , pageHeight] = effectivePageBbox(highlight, pageSizes, renderedSize);
+    if (!highlight.bbox) {
+      return textMatchStyle;
+    }
+    const [, , , pageHeight] = effectivePageBbox(pageSizes, renderedSize);
     const [x0, y0, x1, y1] = highlight.bbox;
     return {
       left: x0 * renderedScale,
@@ -470,13 +486,15 @@ function PdfPage({
     };
   })();
   const highlightScrollKey =
-    highlight && highlight.page === pageNumber && renderedSize
+    highlight && highlight.page === pageNumber && renderedSize && highlightStyle
       ? [
           highlight.page,
-          highlight.bbox.join(","),
+          highlight.bbox?.join(",") ?? normalizeTextForMatch(highlight.quote ?? "").slice(0, 80),
           renderedScale,
           renderedSize.width,
           renderedSize.height,
+          Math.round(highlightStyle.left),
+          Math.round(highlightStyle.top),
         ].join(":")
       : null;
 
@@ -624,10 +642,107 @@ function getVisiblePage(
   return closest?.page ?? null;
 }
 
+function findTextHighlightStyle(
+  textContent: unknown,
+  quote: string,
+  viewport: unknown,
+): HighlightStyle | null {
+  const needle = normalizeTextForMatch(quote).slice(0, 240);
+  if (needle.length < 8) {
+    return null;
+  }
+
+  const items = ((textContent as { items?: unknown[] })?.items ?? [])
+    .map((item, index) => textItemRect(item, viewport, index))
+    .filter((item): item is TextItemRect => item !== null);
+  if (items.length === 0) {
+    return null;
+  }
+
+  const haystack: string[] = [];
+  const indexToItem: number[] = [];
+  items.forEach((item, itemIndex) => {
+    for (const char of normalizeTextForMatch(item.text)) {
+      haystack.push(char);
+      indexToItem.push(itemIndex);
+    }
+  });
+
+  const start = haystack.join("").indexOf(needle);
+  if (start < 0) {
+    return null;
+  }
+  const end = start + needle.length - 1;
+  const firstItem = indexToItem[start];
+  const lastItem = indexToItem[end];
+  if (firstItem === undefined || lastItem === undefined) {
+    return null;
+  }
+
+  const matchedItems = items.slice(firstItem, lastItem + 1);
+  const left = Math.min(...matchedItems.map((item) => item.left));
+  const top = Math.min(...matchedItems.map((item) => item.top));
+  const right = Math.max(...matchedItems.map((item) => item.left + item.width));
+  const bottom = Math.max(...matchedItems.map((item) => item.top + item.height));
+  return {
+    left: Math.max(0, left - 2),
+    top: Math.max(0, top - 2),
+    width: Math.max(2, right - left + 4),
+    height: Math.max(2, bottom - top + 4),
+  };
+}
+
+function textItemRect(item: unknown, viewport: unknown, index: number): TextItemRect | null {
+  const text = typeof (item as { str?: unknown }).str === "string" ? (item as { str: string }).str : "";
+  const transform = (item as { transform?: unknown }).transform;
+  if (!text.trim() || !Array.isArray(transform) || transform.length < 6) {
+    return null;
+  }
+
+  const x = Number(transform[4]);
+  const y = Number(transform[5]);
+  const width = Number((item as { width?: unknown }).width ?? 0);
+  const height = Math.abs(Number((item as { height?: unknown }).height ?? transform[3] ?? 10));
+  if (![x, y, width, height].every(Number.isFinite)) {
+    return null;
+  }
+
+  const rect = [x, y, x + Math.max(1, width), y + Math.max(1, height)];
+  const converter = (viewport as {
+    convertToViewportRectangle?: (rect: number[]) => number[];
+  })?.convertToViewportRectangle;
+  const converted = typeof converter === "function" ? converter.call(viewport, rect) : rect;
+  const [x0, y0, x1, y1] = converted.map(Number);
+  if (![x0, y0, x1, y1].every(Number.isFinite)) {
+    return null;
+  }
+
+  return {
+    text,
+    index,
+    left: Math.min(x0, x1),
+    top: Math.min(y0, y1),
+    width: Math.max(1, Math.abs(x1 - x0)),
+    height: Math.max(1, Math.abs(y1 - y0)),
+  };
+}
+
+function normalizeTextForMatch(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, "");
+}
+
 function effectivePageBbox(
-  _highlight: PdfBboxHighlight,
   _pageSizes: number[][] | undefined,
   renderedSize: { width: number; height: number },
 ): [number, number, number, number] {
   return [0, 0, renderedSize.width, renderedSize.height];
+}
+
+interface TextItemRect {
+  text: string;
+  index: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }

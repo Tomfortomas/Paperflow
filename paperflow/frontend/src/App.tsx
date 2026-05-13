@@ -1166,7 +1166,8 @@ function Workspace({
     if (!first?.page) return null;
     return {
       page: first.page,
-      bbox: first.bbox ?? PDF_PAGE_FALLBACK_HIGHLIGHT_BBOX,
+      bbox: first.bbox ?? (first.quote ? null : PDF_PAGE_FALLBACK_HIGHLIGHT_BBOX),
+      quote: first.quote ?? null,
     };
   })();
 

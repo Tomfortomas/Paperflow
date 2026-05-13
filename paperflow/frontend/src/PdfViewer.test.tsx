@@ -10,7 +10,7 @@ const pdfPage = {
     width: 600 * scale,
     height: 800 * scale,
   }),
-  getTextContent: vi.fn(async () => ({ items: [] })),
+  getTextContent: vi.fn(async () => ({ items: [] as unknown[] })),
   render: vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() })),
 };
 
@@ -37,7 +37,7 @@ describe("PdfViewer", () => {
     pdfDocument.getPage.mockReset();
     pdfDocument.getPage.mockResolvedValue(pdfPage);
     pdfPage.getTextContent.mockReset();
-    pdfPage.getTextContent.mockResolvedValue({ items: [] });
+    pdfPage.getTextContent.mockResolvedValue({ items: [] as unknown[] });
     pdfPage.render.mockReset();
     pdfPage.render.mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() });
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
@@ -212,6 +212,32 @@ describe("PdfViewer", () => {
       ),
     );
     expect(viewer.scrollTop).toBeGreaterThan(0);
+  });
+
+  it("matches evidence quotes to PDF text when no bbox is available", async () => {
+    pdfDocument.numPages = 1;
+    pdfPage.getTextContent.mockResolvedValue({
+      items: [
+        { str: "structured ", transform: [1, 0, 0, 10, 10, 20], width: 80, height: 10 },
+        { str: "reading report", transform: [1, 0, 0, 10, 90, 20], width: 110, height: 10 },
+      ],
+    });
+
+    const { container } = render(
+      <PdfViewer
+        pdfUrl="http://127.0.0.1:8000/paper.pdf"
+        page={1}
+        highlight={{ page: 1, quote: "structured reading report" }}
+      />,
+    );
+
+    await waitFor(() => {
+      const highlight = container.querySelector(".pdf-viewer-highlight") as HTMLElement | null;
+      expect(highlight).toBeInTheDocument();
+      expect(highlight?.style.left).toBe("8px");
+      expect(highlight?.style.top).toBe("18px");
+      expect(highlight?.style.width).toBe("194px");
+    });
   });
 
   it("does not pin scrolling back to the same evidence highlight after page changes", async () => {

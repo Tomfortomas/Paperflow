@@ -2885,45 +2885,29 @@ input[type="file"]::file-selector-button:hover {
   background: var(--accent-soft);
 }
 
-/* Evidence bbox: red translucent marker; intentionally strong for fast visual search. */
+/* Evidence marker: translucent highlighter without outline. */
 .pdf-viewer-highlight {
   position: absolute;
   pointer-events: none;
   z-index: 2;
-  border-radius: 5px;
-  background: rgb(239 68 68 / 0.26);
-  border: 1px solid rgb(220 38 38 / 0.6);
-  box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.6),
-    0 0 0 3px rgb(239 68 68 / 0.18);
+  border-radius: 3px;
+  background: rgb(250 204 21 / 0.34);
+  mix-blend-mode: multiply;
   animation: pdf-highlight-flash 1.2s ease-out 1;
 }
 
 @keyframes pdf-highlight-flash {
   0% {
-    background: rgb(239 68 68 / 0.46);
-    border-color: rgb(185 28 28 / 0.82);
-    filter: brightness(1.08) saturate(1.18);
-    box-shadow:
-      0 0 0 2px rgb(255 255 255 / 0.72),
-      0 0 0 5px rgb(239 68 68 / 0.24),
-      0 0 18px 4px rgb(239 68 68 / 0.28);
+    background: rgb(253 224 71 / 0.62);
+    filter: brightness(1.06) saturate(1.12);
   }
   35% {
-    background: rgb(239 68 68 / 0.34);
-    border-color: rgb(220 38 38 / 0.7);
+    background: rgb(250 204 21 / 0.46);
     filter: brightness(1.02);
-    box-shadow:
-      0 0 0 1px rgb(255 255 255 / 0.64),
-      0 0 0 4px rgb(239 68 68 / 0.2);
   }
   100% {
-    background: rgb(239 68 68 / 0.26);
-    border-color: rgb(220 38 38 / 0.6);
+    background: rgb(250 204 21 / 0.34);
     filter: brightness(1) saturate(1);
-    box-shadow:
-      0 0 0 1px rgb(255 255 255 / 0.6),
-      0 0 0 3px rgb(239 68 68 / 0.18);
   }
 }
 
