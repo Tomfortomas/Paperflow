@@ -6,7 +6,7 @@
     <title>Paperflow README</title>
     <meta
       name="description"
-      content="Paperflow README: setup, usage, features, reliability model, architecture, and status."
+      content="Paperflow README: evidence-first AI paper workspace with R0/R1/R2 reliability, PDF evidence grounding, Agent chat, and Obsidian export."
     />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <style>
@@ -462,16 +462,18 @@
       <main>
         <section class="hero">
           <div>
-            <p class="eyebrow">HTML README</p>
+            <p class="eyebrow">Evidence-first AI paper workspace · 证据优先的 AI 论文工作台</p>
             <h1>Paperflow</h1>
             <p class="lead">
-              Evidence-first paper reading, citation-aware search, Field Maps,
-              and Obsidian export in a local-first research workspace.
+              Read papers, verify claims, ask an Agent with context, and save durable
+              research knowledge. Every generated claim is labeled R0/R1/R2 and traced
+              back to PDF evidence whenever possible.
             </p>
             <div class="actions">
               <a class="button primary" href="https://github.com/shiml20/Paperflow">View on GitHub</a>
               <a class="button" href="#quickstart">Start locally</a>
               <a class="button" href="../README.md">Raw Markdown</a>
+              <a class="button" href="../README.zh-CN.md">中文介绍</a>
             </div>
           </div>
 
@@ -479,16 +481,15 @@
             <img src="./paperflow_banner.png" alt="Paperflow product banner" />
             <div class="badges" aria-label="Project badges">
               <span class="badge">R0 / R1 / R2</span>
-              <span class="badge">DeepSeek</span>
-              <span class="badge">FastAPI</span>
-              <span class="badge">React</span>
+              <span class="badge">PDF evidence</span>
+              <span class="badge">Agent chat</span>
               <span class="badge">Obsidian</span>
             </div>
           </aside>
         </section>
 
         <div class="toc" aria-label="README table of contents">
-          <a href="#what">What it is</a>
+          <a href="#what">Workflow</a>
           <a href="#news">News</a>
           <a href="#quickstart">Quickstart</a>
           <a href="#features">Features</a>
@@ -502,16 +503,16 @@
           <h2>Report first, chat second, evidence always.</h2>
           <div class="grid">
             <article class="card">
-              <strong>Import</strong>
-              <p>Bring in a local PDF, arXiv URL, DOI, OpenReview link, Semantic Scholar page, or Zotero entry.</p>
+              <strong>Import to Report</strong>
+              <p>Bring in a local PDF or arXiv URL and generate a structured Agent Reading Report.</p>
             </article>
             <article class="card">
-              <strong>Read</strong>
-              <p>Generate a structured Reading Report with claims, reliability labels, evidence quotes, and PDF locations.</p>
+              <strong>Claim to Evidence</strong>
+              <p>Click a reliability-labeled claim to jump back to the PDF page and highlight the source evidence.</p>
             </article>
             <article class="card">
-              <strong>Keep</strong>
-              <p>Persist PDFs, reports, SQLite metadata, chat transcripts, Field Maps, and Obsidian-native notes locally.</p>
+              <strong>Ask and Keep</strong>
+              <p>Ask the Agent with report and evidence context, then export durable notes to Obsidian.</p>
             </article>
           </div>
         </section>
@@ -521,20 +522,8 @@
           <h2>Latest updates</h2>
           <div class="news">
             <article class="news-item">
-              <time>v0.6</time>
-              <p>Report generation now uses fast briefing, parallel chunk extraction, and coordinator synthesis to reduce wait time while preserving global consistency.</p>
-            </article>
-            <article class="news-item">
-              <time>v0.5</time>
-              <p>The Workspace now supports a high-resolution continuous PDF pane, page jump, zoom controls, evidence-centered scrolling, and a large-screen three-column layout.</p>
-            </article>
-            <article class="news-item">
-              <time>v0.4</time>
-              <p>Agent chat transcripts are persisted, SSE chat streaming is available, evidence clicks can open the PDF viewer, and Field Map edges include Agent enrichment metadata.</p>
-            </article>
-            <article class="news-item">
-              <time>v0.3</time>
-              <p>The Workspace gained a formal right-rail Agent conversation panel with transcript, process cards, status, composer, and paper-scoped chat API.</p>
+              <time>v0.7</time>
+              <p>Paperflow now presents a public-facing evidence-first AI paper workspace with bilingual README narrative, PDF evidence highlighting, responsive PDF search, Agent chat grounding, local-first research memory, and Obsidian export.</p>
             </article>
           </div>
         </section>
@@ -717,44 +706,7 @@ cd paperflow
         <section class="section" id="status">
           <p class="eyebrow">Status</p>
           <h2>Pre-1.0 milestones</h2>
-          <div class="status-grid">
-            <article class="status-block">
-              <h3>v0.6</h3>
-              <ul>
-                <li>Fast paper briefing before detailed extraction.</li>
-                <li>Parallel chunk extraction with shared briefing.</li>
-                <li>Coordinator deduplication and final synthesis.</li>
-                <li>Richer generation progress messages.</li>
-              </ul>
-            </article>
-            <article class="status-block">
-              <h3>v0.5</h3>
-              <ul>
-                <li>High-resolution continuous PDF viewer.</li>
-                <li>Page jump and zoom presets.</li>
-                <li>Three-column large-screen reading layout.</li>
-                <li>Evidence-driven PDF navigation and highlight scrolling.</li>
-              </ul>
-            </article>
-            <article class="status-block">
-              <h3>v0.4</h3>
-              <ul>
-                <li>Persistent Agent chat transcripts.</li>
-                <li>SSE chat events and final transcript sync.</li>
-                <li>PDF evidence interactions.</li>
-                <li>Agent-enriched Field Map lineage graph edges.</li>
-              </ul>
-            </article>
-            <article class="status-block">
-              <h3>v0.3 and earlier</h3>
-              <ul>
-                <li>Right-rail Agent workspace.</li>
-                <li>Evidence workflow and metadata import.</li>
-                <li>R1 search, Field Map, compare, and R2 insights.</li>
-                <li>Local Obsidian export.</li>
-              </ul>
-            </article>
-          </div>
+          <p>Release history and milestone details now live in <a href="../STATUS.md">STATUS.md</a>.</p>
         </section>
 
         <footer>

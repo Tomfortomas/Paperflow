@@ -2737,103 +2737,6 @@ input[type="file"]::file-selector-button:hover {
   min-width: 0;
 }
 
-/* Wide-but-not-absurd panes (e.g. Cursor three-column): search on its own row. */
-@container pdfviewer (max-width: 1180px) {
-  .pdf-viewer-search {
-    flex: 1 1 100%;
-    flex-basis: 100%;
-    justify-content: flex-start;
-    gap: var(--space-2);
-  }
-
-  .pdf-viewer-search input {
-    flex: 1 1 12rem;
-    min-width: 0;
-    width: auto;
-    max-width: none;
-  }
-}
-
-/* Stacked toolbar + compact controls (typical narrow PDF column). */
-@container pdfviewer (max-width: 760px) {
-  .pdf-viewer-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-2);
-    padding-inline: var(--space-1);
-  }
-
-  .pdf-viewer-toolbar-main {
-    justify-content: center;
-    row-gap: var(--space-1);
-  }
-
-  .pdf-viewer-page-indicator {
-    order: -1;
-    width: 100%;
-    text-align: center;
-  }
-
-  .pdf-viewer-nav-btn-label {
-    display: none;
-  }
-
-  .pdf-viewer-page-form label > span:first-child,
-  .pdf-viewer-zoom > span:first-of-type,
-  .pdf-viewer-search label > span:first-child {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  .pdf-viewer-search {
-    flex-wrap: wrap;
-    gap: var(--space-1);
-  }
-
-  .pdf-viewer-search-status {
-    width: 100%;
-    order: 10;
-  }
-}
-
-@container pdfviewer (max-width: 400px) {
-  .pdf-viewer-toolbar button,
-  .pdf-viewer-toolbar input,
-  .pdf-viewer-toolbar select {
-    padding: 0.32em 0.45em;
-    font-size: max(0.7rem, 0.85em);
-  }
-
-  .pdf-viewer-page-indicator {
-    font-size: var(--t-micro);
-  }
-}
-
-/* Browsers without container queries: approximate using viewport when PDF is in workspace. */
-@supports not (container-type: inline-size) {
-  @media (max-width: 1100px) {
-    .workspace-pdf-pane .pdf-viewer-search {
-      flex: 1 1 100%;
-      flex-basis: 100%;
-      justify-content: flex-start;
-    }
-
-    .workspace-pdf-pane .pdf-viewer-search input {
-      flex: 1 1 12rem;
-      min-width: 0;
-      width: auto;
-      max-width: none;
-    }
-  }
-}
-
 @media (min-width: 1440px) {
   .workspace-pdf-pane .pdf-viewer {
     height: 100%;
@@ -2960,6 +2863,123 @@ input[type="file"]::file-selector-button:hover {
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+}
+
+/* Wide-but-not-absurd panes (e.g. Cursor three-column): search on its own row. */
+@container pdfviewer (max-width: 1180px) {
+  .pdf-viewer-search {
+    flex: 1 1 100%;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    gap: var(--space-2);
+  }
+
+  .pdf-viewer-search input {
+    flex: 1 1 12rem;
+    min-width: 0;
+    width: auto;
+    max-width: none;
+  }
+}
+
+/* Narrow PDF columns use a fixed two-row toolbar. */
+@container pdfviewer (max-width: 760px) {
+  .pdf-viewer-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-2);
+    padding-inline: var(--space-1);
+  }
+
+  .pdf-viewer-toolbar-main {
+    display: flex;
+    flex: none;
+    width: 100%;
+    justify-content: center;
+    row-gap: var(--space-1);
+  }
+
+  .pdf-viewer-page-indicator {
+    order: -1;
+    width: 100%;
+    text-align: center;
+  }
+
+  .pdf-viewer-nav-btn-label {
+    display: none;
+  }
+
+  .pdf-viewer-page-form label > span:first-child,
+  .pdf-viewer-zoom > span:first-of-type,
+  .pdf-viewer-search label > span:first-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .pdf-viewer-search {
+    display: flex;
+    flex: none;
+    flex-basis: auto;
+    width: min(100%, 28rem);
+    justify-self: center;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-1);
+  }
+
+  .pdf-viewer-search label {
+    flex: 1 1 12rem;
+    min-width: 0;
+  }
+
+  .pdf-viewer-search input {
+    width: 100%;
+  }
+
+  .pdf-viewer-search-status {
+    width: 100%;
+    order: 10;
+    text-align: center;
+  }
+}
+
+@container pdfviewer (max-width: 400px) {
+  .pdf-viewer-toolbar button,
+  .pdf-viewer-toolbar input,
+  .pdf-viewer-toolbar select {
+    padding: 0.32em 0.45em;
+    font-size: max(0.7rem, 0.85em);
+  }
+
+  .pdf-viewer-page-indicator {
+    font-size: var(--t-micro);
+  }
+}
+
+/* Browsers without container queries: approximate using viewport when PDF is in workspace. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 1100px) {
+    .workspace-pdf-pane .pdf-viewer-search {
+      flex: 1 1 100%;
+      flex-basis: 100%;
+      justify-content: flex-start;
+    }
+
+    .workspace-pdf-pane .pdf-viewer-search input {
+      flex: 1 1 12rem;
+      min-width: 0;
+      width: auto;
+      max-width: none;
+    }
+  }
 }
 
 .pdf-viewer-pages {

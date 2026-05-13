@@ -4,10 +4,12 @@
 
 # Paperflow
 
-**证据优先的论文研读台：阅读报告、引用检索、领域地图、Obsidian 知识库。**
+**证据优先的 AI 论文工作台。**  
+**Evidence-first AI paper workspace.**
 
-Paperflow 是一个面向 AI 研究者和工程师的本地优先论文工作台。
-它使用 DeepSeek-backed Agent 生成结构化阅读报告，并把每个生成结论标记为 **R0 / R1 / R2**，尽可能追溯到 PDF 原文证据。
+用于阅读论文、核验证据、追问 Agent、沉淀知识。Paperflow 不是普通 PDF 阅读器：每个生成结论都带 **R0 / R1 / R2** 可靠性标记，并尽可能回到 PDF 原文证据。
+
+Read papers, verify claims, ask an Agent with context, and save durable research knowledge. Paperflow is not a generic PDF reader: every generated claim is labeled **R0 / R1 / R2** and traced back to PDF evidence whenever possible.
 
 [English](./README.md) · [中文](./README.zh-CN.md) · [项目首页](./index.html)
 
@@ -23,29 +25,82 @@ Paperflow 是一个面向 AI 研究者和工程师的本地优先论文工作台
 
 ---
 
-## Paperflow 是什么
+## 核心工作流
 
-Paperflow 把读论文变成一个可追溯、可积累的本地研究流程：
+```mermaid
+flowchart LR
+  importPdf["导入论文 Import PDF or arXiv"] --> readingReport["阅读报告 Agent Reading Report"]
+  readingReport --> evidenceHighlight["证据高亮 PDF Evidence Highlight"]
+  evidenceHighlight --> agentChat["追问 Agent Chat with R0/R1/Web Context"]
+  agentChat --> obsidianExport["沉淀笔记 Export to Obsidian"]
+```
 
-- 导入本地 PDF 或 arXiv 链接。
-- 生成结构化 Reading Report，而不是一次性摘要。
-- 用 R0 / R1 / R2 标记每个 claim 的可靠性。
-- 点击 claim / evidence 回到 PDF 原文位置。
-- 在右侧 Agent 对话区基于报告、选中证据、R1 缓存继续追问。
-- 保存为 Obsidian 友好的本地知识库笔记。
+Paperflow 把一篇论文变成可追溯的研究工作台：先生成结构化报告，再核验 PDF 证据，然后带着证据追问 Agent，最后沉淀到 Obsidian。
 
-产品原则很简单：**先报告，后聊天；没有证据，就不假装确定。**
+Paperflow turns a paper into a reliability-labeled workspace: structured report first, evidence-backed claims second, paper-aware chat third, durable notes last.
+
+---
+
+## 产品演示图
+
+<table>
+  <tr>
+    <td width="20%"><img src="./assets/demo/01-import-to-report.png" alt="导入到阅读报告 / Import to Reading Report" /></td>
+    <td width="20%"><img src="./assets/demo/02-claim-to-evidence.png" alt="结论跳转到 PDF 证据 / Claim to PDF Evidence" /></td>
+    <td width="20%"><img src="./assets/demo/03-agent-chat.png" alt="带着证据追问 / Ask with Evidence" /></td>
+    <td width="20%"><img src="./assets/demo/04-reliability-model.png" alt="可靠性分级 / R0/R1/R2 Reliability" /></td>
+    <td width="20%"><img src="./assets/demo/05-obsidian-export.png" alt="导出到 Obsidian / Export to Obsidian" /></td>
+  </tr>
+  <tr>
+    <td><strong>导入到阅读报告</strong><br />Import to Report</td>
+    <td><strong>结论跳转证据</strong><br />Claim to Evidence</td>
+    <td><strong>带证据追问</strong><br />Ask with Evidence</td>
+    <td><strong>可靠性分级</strong><br />R0/R1/R2</td>
+    <td><strong>沉淀到知识库</strong><br />Obsidian Export</td>
+  </tr>
+</table>
+
+
+---
+
+## 快速演示
+
+用一篇论文跑完整流程：
+
+1. 导入本地 PDF，或粘贴 arXiv URL。
+2. 等待 Agent 生成结构化阅读报告。
+3. 点击带可靠性标记的结论。
+4. 跳转到 PDF 原文页并高亮支持证据。
+5. 追问 Agent："这条 limitation 的证据是什么？"
+6. 保存或更新 Obsidian 笔记。
+
+English flow:
+
+1. Import a local PDF or paste an arXiv URL.
+2. Let the Agent generate a structured Reading Report.
+3. Click a reliability-labeled claim.
+4. Jump to the supporting PDF page and highlight the evidence.
+5. Ask the Agent: "What evidence supports this limitation?"
+6. Save or update the Obsidian note.
+
+---
+
+## Paperflow 有什么不同
+
+- **R0/R1/R2 可靠性分级 / Reliability model**：区分当前论文事实、外部上下文和高层推断。
+- **PDF 证据定位 / PDF evidence grounding**：结论可以跳回 PDF 页面并高亮支持文本。
+- **带上下文的 Agent 对话 / Agent chat with paper + web/model context**：对话基于阅读报告、选中证据、R1 缓存，以及可选的 Web/模型知识。
+- **本地优先研究记忆 / Local-first research memory**：PDF、报告 JSON、SQLite 元数据、Obsidian 笔记保存在本地。
+- **知识库沉淀 / Obsidian export**：阅读结果变成长期知识，而不是一次性聊天记录。
+
+产品原则很简单：**先报告，后聊天；始终回到证据。**  
+Product stance: **report first, chat second, evidence always**.
 
 ---
 
 ## News
 
-- **2026-05-12 — v0.6 完成。** 报告生成升级为快速 briefing → 并行 chunk 抽取 → coordinator 合并综合，在减少等待时间的同时保留全局一致性和证据追踪。
-- **2026-05-12 — v0.5 完成。** Workspace 支持高清连续滚动 PDF pane、页码跳转、缩放控件、证据居中滚动，以及大屏三栏阅读布局。
-- **2026-05-12 — v0.4 完成。** Agent Chat 已持久化，支持 SSE 对话流，evidence 可打开 PDF 并跳页，Field Map 关系边加入 Agent enrichment 元数据。
-- **2026-05-12 — v0.3 发布。** Workspace 右侧升级为正式 Agent 对话栏，包含 transcript、process cards、status、composer 和 paper-scoped chat API。
-- **2026-05-12 — v0.2 完成。** Evidence workflow、metadata import、R1 search、Field Map、compare、R2 insights、task queue 全部落地。
-- **2026-05-12 — 项目首页加入仓库。** 可通过 [`index.html`](./index.html) 查看轻量 landing page。
+- **2026-05-13 — v0.7 发布。** Paperflow 现在以证据优先的 AI 论文工作台对外呈现：双语 README 叙事、PDF 原文证据高亮、响应式 PDF 搜索、Agent 对话 grounding、本地优先研究记忆，以及 Obsidian 导出。
 
 ---
 
@@ -335,10 +390,9 @@ pytest -q
 
 Paperflow 还在早期，但 reliability contract 已经稳定。适合优先贡献的方向：
 
-- 提升 PDF 解析质量：section、table、reference、equation。
-- 加强 evidence 定位与 PDF highlight。
-- 扩展 Obsidian renderer：Field Map note、R2 callout、citation graph link。
-- 增加 import -> report -> Agent chat -> Obsidian export 的端到端测试。
+- **领域时间线与领域地图梳理**：补充具体研究方向的 timeline、milestones、method families、datasets、benchmarks 和 open problems。
+- **更友好的交互方式**：改进阅读流程、证据导航、PDF 高亮体验、Agent 对话 UX、快捷键、onboarding。
+- **其他改进**：PDF 解析质量、evidence 定位检查、Obsidian 渲染、测试、文档、本地化，以及围绕可靠性的细节修复。
 
 请保持 PR 与可靠性契约一致：任何产生事实的 UI 表面，都应该能表示为 R0 / R1 / R2 并带证据。
 
@@ -372,61 +426,4 @@ Copyright © 2026 shiml20 and Paperflow contributors.
 
 ## Status
 
-Paperflow 当前有两个前端，共用同一个后端 Agent harness：
-
-- **Web**：React + Vite + TypeScript，report-first Workspace、PDF viewer、Agent rail、Obsidian export。
-- **TUI**：Textual + httpx，键盘驱动 Library / Workspace / R0-R1-R2 / Evidence / Q&A flow。
-
-### v0.1
-
-- [x] Library-first home with status tracking (`queued` -> `processing` -> `completed` / `failed`)
-- [x] DeepSeek-backed PaperAgent generating R0 Reading Reports
-- [x] R0 / R1 / R2 reliability badges in UI and data model
-- [x] Evidence quote, page, and section per claim
-- [x] Background agent task with persistent reports
-- [x] Obsidian-native paper note export
-- [x] Focused Q&A around dataset / benchmark / method / compute / limitations
-
-### v0.2
-
-- [x] **Evidence Workflow**：PyMuPDF block parser、evidence verification、PDF.js page jump、bbox highlight、select-to-ask。
-- [x] **Metadata & Import**：arXiv、CrossRef、Semantic Scholar、OpenReview、Zotero、DOI/arXiv/content-hash dedup。
-- [x] **Real R1 Search**：Semantic Scholar、OpenAlex fallback、Papers with Code、本地 references 的六路 related-work search。
-- [x] **Field Map**：milestones、timeline、task taxonomy、datasets、benchmarks、method families、open problems、trends、R2 opportunities。
-- [x] **Compare + R2 + Task Queue**：多论文 compare、research insights、Field Map Obsidian export、cancel/retry/resume task APIs。
-
-### v0.3
-
-- [x] 正式 Agent Conversation rail，替代旧 focused Q&A 区域。
-- [x] Paper-scoped chat API：`POST /api/papers/{paper_id}/chat`。
-- [x] Evidence-aware chat inputs：selected claim、evidence、page、quote、section。
-- [x] 右侧 rail 信息架构：Agent status、config、evidence、chat、Obsidian export。
-
-### v0.4
-
-- [x] Chunked full-paper Reading Reports over bounded DeepSeek chunks.
-- [x] Dynamic partial reports so the first key findings appear before full completion.
-- [x] Coverage-aware UI such as `覆盖全文 50%` and `覆盖全文 100% · 8 chunks`.
-- [x] Live parsing metrics while generation is still running.
-- [x] Transparent Agent progress for extraction, request preparation, model wait, coverage, and persistence.
-- [x] Runtime Agent configuration for local API key, model, and report timeout.
-- [x] Persist Agent chat threads in SQLite and restore the latest transcript when the Workspace opens.
-- [x] Upgrade chat answers to a DeepSeek-backed chat agent over report + selected evidence + R1 cache, with a report-grounded fallback.
-- [x] Surface report and chat work through the task lifecycle; report import/rerun now runs through the task queue wrapper and chat records completed task snapshots.
-- [x] Add SSE streaming for Agent chat step/final events, with frontend stream consumption and final transcript sync.
-- [x] Deepen PDF evidence interactions: evidence detail can open the PDF viewer, jump to the evidence page, and reuse bbox highlights when available.
-- [x] Add Agent-enriched Field Map / lineage graph edges with source type, rationale, confidence, and UI labels that distinguish Agent suggestions from rule-derived relations.
-
-### v0.5
-
-- [x] PDF 页面按 device-pixel-ratio 渲染，Retina 和大屏下文字更清晰。
-- [x] PDF 支持连续滚动阅读，toolbar 支持直接输入页码跳转，并提供 `Fit`、`100%`、`125%`、`150%` 缩放预设。
-- [x] PDF 从报告流中独立成 Workspace pane，大屏下变成左侧栏。
-- [x] 保留 evidence-driven PDF 打开逻辑：点击 evidence 会打开 PDF pane、跳到对应页，并在有 bbox 时把高亮滚到视野中。
-
-### v0.6
-
-- [x] 将串行全文报告生成替换为分阶段 Agent pipeline：快速 paper briefing、并行 chunk 抽取、coordinator 去重合并、最终综合。
-- [x] 所有 chunk agent 共享同一份 paper briefing，让并行抽取仍保持全局一致，并减少重复 claim。
-- [x] 并行抽取过程中继续保存 partial report，最终由 coordinator 合并重复、保守补齐缺失 section，并保留精确 evidence quote。
-- [x] 增加更细的生成状态：briefing、并行 chunk 抽取、单个 chunk 完成、coordinator synthesis。
+发版历史与里程碑细节见 [`STATUS.md`](./STATUS.md)。

@@ -84,3 +84,7 @@ DeepSeek-TUI/
 # Internal design docs (kept locally, not part of the open-source repo)
 # ============================================================================
 design_docs/
+
+# Local PR / launch copy drafts (not part of the open-source repo)
+docs/pr-plan.md
+docs/launch-copy.md

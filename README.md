@@ -4,10 +4,13 @@
 
 # Paperflow
 
-**Evidence-first paper reading + citation-aware search + field map + Obsidian knowledge base.**
+**Evidence-first AI paper workspace.**  
+**证据优先的 AI 论文工作台。**
 
-A local-first paper-reading workbench for AI researchers and engineers.
-Powered by DeepSeek-backed agents, every generated claim is graded **R0 / R1 / R2** and traced back to the paper whenever possible.
+Read papers, verify claims, ask an Agent with context, and save durable research knowledge.
+Paperflow is not a generic PDF reader: every generated claim is labeled **R0 / R1 / R2** and traced back to PDF evidence whenever possible.
+
+用于阅读论文、核验证据、追问 Agent、沉淀知识。Paperflow 不是普通 PDF 阅读器：每个生成结论都带 **R0 / R1 / R2** 可靠性标记，并尽可能回到 PDF 原文证据。
 
 [English](./README.md) · [中文](./README.zh-CN.md) · [Landing Page](./index.html)
 
@@ -23,29 +26,82 @@ Powered by DeepSeek-backed agents, every generated claim is graded **R0 / R1 / R
 
 ---
 
-## What Is Paperflow
+## Core Workflow
 
-Paperflow turns paper reading into a local-first research workflow:
+```mermaid
+flowchart LR
+  importPdf["Import PDF or arXiv 导入论文"] --> readingReport["Agent Reading Report 阅读报告"]
+  readingReport --> evidenceHighlight["PDF Evidence Highlight 证据高亮"]
+  evidenceHighlight --> agentChat["Chat with R0/R1/Web Context 追问 Agent"]
+  agentChat --> obsidianExport["Export to Obsidian 沉淀笔记"]
+```
 
-- Import a PDF or arXiv URL.
-- Generate a structured Reading Report instead of a generic summary.
-- Inspect every claim through R0 / R1 / R2 reliability labels.
-- Jump from claims back to PDF evidence when location data is available.
-- Ask a paper-scoped Agent chat grounded in the report, selected evidence, and R1 cache.
-- Save the result into an Obsidian-friendly local knowledge base.
+Paperflow turns a paper into a reliability-labeled workspace: structured report first, evidence-backed claims second, paper-aware chat third, durable notes last.
 
-The product stance is simple: **report first, chat second, evidence always**.
+Paperflow 把一篇论文变成可追溯的研究工作台：先生成结构化报告，再核验 PDF 证据，然后带着证据追问 Agent，最后沉淀到 Obsidian。
+
+---
+
+## Product Demo Strip
+
+<table>
+  <tr>
+    <td width="20%"><img src="./assets/demo/01-import-to-report.png" alt="Import to Reading Report / 导入到阅读报告" /></td>
+    <td width="20%"><img src="./assets/demo/02-claim-to-evidence.png" alt="Claim to PDF Evidence / 结论跳转到 PDF 证据" /></td>
+    <td width="20%"><img src="./assets/demo/03-agent-chat.png" alt="Ask with Evidence / 带着证据追问" /></td>
+    <td width="20%"><img src="./assets/demo/04-reliability-model.png" alt="R0/R1/R2 Reliability / 可靠性分级" /></td>
+    <td width="20%"><img src="./assets/demo/05-obsidian-export.png" alt="Export to Obsidian / 导出到 Obsidian" /></td>
+  </tr>
+  <tr>
+    <td><strong>Import to Report</strong><br />导入到阅读报告</td>
+    <td><strong>Claim to Evidence</strong><br />结论跳转证据</td>
+    <td><strong>Ask with Evidence</strong><br />带证据追问</td>
+    <td><strong>R0/R1/R2</strong><br />可靠性分级</td>
+    <td><strong>Obsidian Export</strong><br />沉淀到知识库</td>
+  </tr>
+</table>
+
+
+---
+
+## Quick Demo
+
+Use one paper to see the full loop:
+
+1. Import a local PDF or paste an arXiv URL.
+2. Let the Agent generate a structured Reading Report.
+3. Click a reliability-labeled claim.
+4. Jump to the supporting PDF page and highlight the evidence.
+5. Ask the Agent: "What evidence supports this limitation?"
+6. Save or update the Obsidian note.
+
+中文流程：
+
+1. 导入本地 PDF，或粘贴 arXiv URL。
+2. 等待 Agent 生成结构化阅读报告。
+3. 点击带可靠性标记的结论。
+4. 跳转到 PDF 原文页并高亮支持证据。
+5. 追问 Agent："这条 limitation 的证据是什么？"
+6. 保存或更新 Obsidian 笔记。
+
+---
+
+## Why Paperflow Is Different
+
+- **R0/R1/R2 reliability model / 可靠性分级**: separates paper-grounded facts, external context, and higher-level inference.
+- **PDF evidence grounding / PDF 证据定位**: claims can jump back to the PDF page and highlight supporting text.
+- **Agent chat with paper + web/model context / 带上下文的 Agent 对话**: chat is grounded in the report, selected evidence, R1 cache, and optional web/model knowledge.
+- **Local-first research memory / 本地优先研究记忆**: PDFs, report JSON, SQLite metadata, and Obsidian notes stay under local project data.
+- **Obsidian export / 知识库沉淀**: reading outputs become durable knowledge, not disposable chat history.
+
+The product stance is simple: **report first, chat second, evidence always**.  
+产品原则很简单：**先报告，后聊天；始终回到证据。**
 
 ---
 
 ## News
 
-- **2026-05-12 — v0.6 completed.** Report generation now uses a fast briefing → parallel chunk extraction → coordinator synthesis pipeline, reducing wait time while preserving global consistency and evidence grounding.
-- **2026-05-12 — v0.5 completed.** The Workspace now supports a high-resolution continuous PDF pane, page jump, zoom controls, evidence-centered scrolling, and a large-screen three-column reading layout.
-- **2026-05-12 — v0.4 completed.** Agent chat transcripts are persisted, SSE chat streaming is available, evidence clicks can open the PDF viewer, and Field Map edges now include Agent enrichment metadata.
-- **2026-05-12 — v0.3 released.** The Workspace gained a formal right-rail Agent conversation panel with transcript, process cards, status, composer, and paper-scoped chat API.
-- **2026-05-12 — v0.2 completed.** Evidence workflow, metadata import, R1 search, Field Map, compare, R2 insights, and task queue support landed.
-- **2026-05-12 — Project page added.** A lightweight static landing page is available at [`index.html`](./index.html).
+- **2026-05-13 — v0.7 released.** Paperflow now presents a public-facing evidence-first AI paper workspace: bilingual README narrative, PDF evidence highlighting, responsive PDF search, Agent chat grounding, local-first research memory, and Obsidian export.
 
 ---
 
@@ -336,10 +392,9 @@ pytest -q
 
 Paperflow is early, but the reliability contract is stable. Good first contributions:
 
-- Improve PDF parsing fidelity for sections, tables, references, and equations.
-- Add stronger evidence-location checks and PDF highlighting.
-- Extend the Obsidian renderer for Field Maps, R2 callouts, and citation graph links.
-- Add end-to-end tests for import -> report -> Agent chat -> Obsidian export.
+- **Field timelines and domain maps**: curate timelines, milestones, method families, datasets, benchmarks, and open problems for specific research areas.
+- **Friendlier interaction design**: improve the reading flow, evidence navigation, PDF highlight experience, Agent chat UX, keyboard shortcuts, and onboarding.
+- **Other improvements**: parsing fidelity, evidence-location checks, Obsidian rendering, tests, docs, localization, and small reliability-focused fixes.
 
 Please keep PRs aligned with the reliability contract: every UI surface that produces a fact should be expressible as R0 / R1 / R2 with evidence.
 
@@ -373,61 +428,4 @@ If Paperflow is useful to your research workflow, a star is the kindest signal.
 
 ## Status
 
-Paperflow currently ships two front-ends on top of the same backend agent harness:
-
-- **Web**: React + Vite + TypeScript, report-first Workspace, PDF viewer, Agent rail, and Obsidian export.
-- **TUI**: Textual + httpx, keyboard-driven Library / Workspace / R0-R1-R2 / Evidence / Q&A flow.
-
-### v0.1
-
-- [x] Library-first home with status tracking (`queued` -> `processing` -> `completed` / `failed`)
-- [x] DeepSeek-backed PaperAgent generating R0 Reading Reports
-- [x] R0 / R1 / R2 reliability badges in UI and data model
-- [x] Evidence quote, page, and section per claim
-- [x] Background agent task with persistent reports
-- [x] Obsidian-native paper note export
-- [x] Focused Q&A around dataset / benchmark / method / compute / limitations
-
-### v0.2
-
-- [x] **Evidence Workflow**: PyMuPDF block parser, evidence verification, PDF.js page jump, bbox highlight, and select-to-ask.
-- [x] **Metadata & Import**: arXiv, CrossRef, Semantic Scholar, OpenReview, Zotero, and DOI/arXiv/content-hash deduplication.
-- [x] **Real R1 Search**: six-lane related-work search over Semantic Scholar, OpenAlex fallback, Papers with Code, and local references.
-- [x] **Field Map**: milestones, timeline, task taxonomy, datasets, benchmarks, method families, open problems, trends, and R2 opportunities.
-- [x] **Compare + R2 + Task Queue**: multi-paper compare, research insights, Field Map Obsidian export, cancel/retry/resume task APIs.
-
-### v0.3
-
-- [x] Formal Agent Conversation rail replacing the old focused Q&A area.
-- [x] Paper-scoped chat API: `POST /api/papers/{paper_id}/chat`.
-- [x] Evidence-aware chat inputs: selected claim, evidence, page, quote, and section.
-- [x] Right-rail information architecture for Agent status, config, evidence, chat, and Obsidian export.
-
-### v0.4
-
-- [x] Chunked full-paper Reading Reports over bounded DeepSeek chunks.
-- [x] Dynamic partial reports so the first key findings appear before full completion.
-- [x] Coverage-aware UI such as `覆盖全文 50%` and `覆盖全文 100% · 8 chunks`.
-- [x] Live parsing metrics while generation is still running.
-- [x] Transparent Agent progress for extraction, request preparation, model wait, coverage, and persistence.
-- [x] Runtime Agent configuration for local API key, model, and report timeout.
-- [x] Persist Agent chat threads in SQLite and restore the latest transcript when the Workspace opens.
-- [x] Upgrade chat answers to a DeepSeek-backed chat agent over report + selected evidence + R1 cache, with a report-grounded fallback.
-- [x] Surface report and chat work through the task lifecycle; report import/rerun now runs through the task queue wrapper and chat records completed task snapshots.
-- [x] Add SSE streaming for Agent chat step/final events, with frontend stream consumption and final transcript sync.
-- [x] Deepen PDF evidence interactions: evidence detail can open the PDF viewer, jump to the evidence page, and reuse bbox highlights when available.
-- [x] Add Agent-enriched Field Map / lineage graph edges with source type, rationale, confidence, and UI labels that distinguish Agent suggestions from rule-derived relations.
-
-### v0.5
-
-- [x] Render PDF pages at device-pixel-ratio resolution so text stays sharp on Retina and large displays.
-- [x] Add continuous PDF scrolling with toolbar controls for direct page jump and zoom presets (`Fit`, `100%`, `125%`, `150%`).
-- [x] Move the PDF into an independent Workspace pane that becomes a left column on large screens.
-- [x] Keep evidence-driven PDF opening: clicking evidence opens the PDF pane, jumps to the page, and scrolls the highlight into view when bbox data exists.
-
-### v0.6
-
-- [x] Replace serial full-report generation with a staged Agent pipeline: fast paper briefing, parallel chunk extraction, coordinator deduplication, and final synthesis.
-- [x] Share the same paper briefing with every chunk agent so parallel extraction stays globally consistent and avoids repeated claims.
-- [x] Preserve partial reports during extraction while the final coordinator pass merges duplicates, fills missing required sections conservatively, and keeps exact evidence quotes.
-- [x] Add richer generation status messages for briefing, parallel chunk extraction, per-chunk completion, and coordinator synthesis.
+For release history and milestone details, see [`STATUS.md`](./STATUS.md).
