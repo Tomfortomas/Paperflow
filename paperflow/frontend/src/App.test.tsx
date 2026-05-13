@@ -212,7 +212,7 @@ describe("Paperflow app", () => {
     expect(screen.getByText(/1m 4s/)).toBeInTheDocument();
   });
 
-  it("localizes v0.6 parallel chunk progress in the parse trace", async () => {
+  it("localizes parallel chunk progress in the parse trace", async () => {
     const user = userEvent.setup();
     const processingPaper: Paper = {
       ...paper,

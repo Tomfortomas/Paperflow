@@ -4,15 +4,12 @@
 
 # Paperflow
 
-**Evidence-first AI paper workspace.**  
-**证据优先的 AI 论文工作台。**
+**Evidence-first agentic paper workspace.**
 
 Read papers, verify claims, ask an Agent with context, and save durable research knowledge.
 Paperflow is not a generic PDF reader: every generated claim is labeled **R0 / R1 / R2** and traced back to PDF evidence whenever possible.
 
-用于阅读论文、核验证据、追问 Agent、沉淀知识。Paperflow 不是普通 PDF 阅读器：每个生成结论都带 **R0 / R1 / R2** 可靠性标记，并尽可能回到 PDF 原文证据。
-
-[English](./README.md) · [中文](./README.zh-CN.md) · [Landing Page](./index.html)
+[English](./README.md) · [Chinese](./README.zh-CN.md) · [Landing Page](./index.html)
 
 [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-red.svg)](./LICENSE)
 [![Research-only](https://img.shields.io/badge/use-research%20only-orange.svg)](./LICENSE)
@@ -30,15 +27,13 @@ Paperflow is not a generic PDF reader: every generated claim is labeled **R0 / R
 
 ```mermaid
 flowchart LR
-  importPdf["Import PDF or arXiv 导入论文"] --> readingReport["Agent Reading Report 阅读报告"]
-  readingReport --> evidenceHighlight["PDF Evidence Highlight 证据高亮"]
-  evidenceHighlight --> agentChat["Chat with R0/R1/Web Context 追问 Agent"]
-  agentChat --> obsidianExport["Export to Obsidian 沉淀笔记"]
+  importPdf["Import PDF or arXiv"] --> readingReport["Agent Reading Report"]
+  readingReport --> evidenceHighlight["PDF Evidence Highlight"]
+  evidenceHighlight --> agentChat["Chat with R0/R1/Web Context"]
+  agentChat --> obsidianExport["Export to Obsidian"]
 ```
 
 Paperflow turns a paper into a reliability-labeled workspace: structured report first, evidence-backed claims second, paper-aware chat third, durable notes last.
-
-Paperflow 把一篇论文变成可追溯的研究工作台：先生成结构化报告，再核验 PDF 证据，然后带着证据追问 Agent，最后沉淀到 Obsidian。
 
 ---
 
@@ -46,18 +41,18 @@ Paperflow 把一篇论文变成可追溯的研究工作台：先生成结构化�
 
 <table>
   <tr>
-    <td width="20%"><img src="./assets/demo/01-import-to-report.png" alt="Import to Reading Report / 导入到阅读报告" /></td>
-    <td width="20%"><img src="./assets/demo/02-claim-to-evidence.png" alt="Claim to PDF Evidence / 结论跳转到 PDF 证据" /></td>
-    <td width="20%"><img src="./assets/demo/03-agent-chat.png" alt="Ask with Evidence / 带着证据追问" /></td>
-    <td width="20%"><img src="./assets/demo/04-reliability-model.png" alt="R0/R1/R2 Reliability / 可靠性分级" /></td>
-    <td width="20%"><img src="./assets/demo/05-obsidian-export.png" alt="Export to Obsidian / 导出到 Obsidian" /></td>
+    <td width="20%"><img src="./assets/demo/en-01-import-to-report.png" alt="Import to Reading Report" /></td>
+    <td width="20%"><img src="./assets/demo/en-02-claim-to-evidence.png" alt="Claim to PDF Evidence" /></td>
+    <td width="20%"><img src="./assets/demo/en-03-agent-chat.png" alt="Ask with Evidence" /></td>
+    <td width="20%"><img src="./assets/demo/en-04-reliability-model.png" alt="R0/R1/R2 Reliability" /></td>
+    <td width="20%"><img src="./assets/demo/en-05-obsidian-export.png" alt="Export to Obsidian" /></td>
   </tr>
   <tr>
-    <td><strong>Import to Report</strong><br />导入到阅读报告</td>
-    <td><strong>Claim to Evidence</strong><br />结论跳转证据</td>
-    <td><strong>Ask with Evidence</strong><br />带证据追问</td>
-    <td><strong>R0/R1/R2</strong><br />可靠性分级</td>
-    <td><strong>Obsidian Export</strong><br />沉淀到知识库</td>
+    <td><strong>Import to Report</strong></td>
+    <td><strong>Claim to Evidence</strong></td>
+    <td><strong>Ask with Evidence</strong></td>
+    <td><strong>R0/R1/R2</strong></td>
+    <td><strong>Obsidian Export</strong></td>
   </tr>
 </table>
 
@@ -75,33 +70,23 @@ Use one paper to see the full loop:
 5. Ask the Agent: "What evidence supports this limitation?"
 6. Save or update the Obsidian note.
 
-中文流程：
-
-1. 导入本地 PDF，或粘贴 arXiv URL。
-2. 等待 Agent 生成结构化阅读报告。
-3. 点击带可靠性标记的结论。
-4. 跳转到 PDF 原文页并高亮支持证据。
-5. 追问 Agent："这条 limitation 的证据是什么？"
-6. 保存或更新 Obsidian 笔记。
-
 ---
 
 ## Why Paperflow Is Different
 
-- **R0/R1/R2 reliability model / 可靠性分级**: separates paper-grounded facts, external context, and higher-level inference.
-- **PDF evidence grounding / PDF 证据定位**: claims can jump back to the PDF page and highlight supporting text.
-- **Agent chat with paper + web/model context / 带上下文的 Agent 对话**: chat is grounded in the report, selected evidence, R1 cache, and optional web/model knowledge.
-- **Local-first research memory / 本地优先研究记忆**: PDFs, report JSON, SQLite metadata, and Obsidian notes stay under local project data.
-- **Obsidian export / 知识库沉淀**: reading outputs become durable knowledge, not disposable chat history.
+- **R0/R1/R2 reliability model**: separates paper-grounded facts, external context, and higher-level inference.
+- **PDF evidence grounding**: claims can jump back to the PDF page and highlight supporting text.
+- **Agent chat with paper + web/model context**: chat is grounded in the report, selected evidence, R1 cache, and optional web/model knowledge.
+- **Local-first research memory**: PDFs, report JSON, SQLite metadata, and Obsidian notes stay under local project data.
+- **Obsidian export**: reading outputs become durable knowledge, not disposable chat history.
 
-The product stance is simple: **report first, chat second, evidence always**.  
-产品原则很简单：**先报告，后聊天；始终回到证据。**
+The product stance is simple: **report first, chat second, evidence always**.
 
 ---
 
 ## News
 
-- **2026-05-13 — v0.7 released.** Paperflow now presents a public-facing evidence-first AI paper workspace: bilingual README narrative, PDF evidence highlighting, responsive PDF search, Agent chat grounding, local-first research memory, and Obsidian export.
+- **2026-05-13 — v0.1 released.** Paperflow now presents a public-facing evidence-first agentic paper workspace: PDF evidence highlighting, responsive PDF search, Agent chat grounding, local-first research memory, and Obsidian export. Future small feature releases will use the `v0.1.x` format.
 
 ---
 
@@ -236,7 +221,7 @@ Useful bindings:
 
 - **Chunked full-paper reading**: long PDFs are split into bounded chunks instead of being summarized from only the first text window.
 - **Dynamic partial reports**: the first completed chunk is saved immediately, so readers can see key findings before the whole paper finishes.
-- **Coverage-aware generation**: the UI shows progress such as `覆盖全文 50%`, then `覆盖全文 100% · 8 chunks` when all chunks are covered.
+- **Coverage-aware generation**: the UI shows progress such as `full-paper coverage 50%`, then `full-paper coverage 100% · 8 chunks` when all chunks are covered.
 - **Live parsing metrics**: elapsed time keeps ticking while generation is running; tokens, coverage, and chunk count update as new partial reports arrive.
 - **Transparent process output**: the Workspace shows PDF text extraction, DeepSeek request preparation, model wait, chunk coverage, report persistence, and failure states.
 
@@ -325,7 +310,7 @@ Every R0 claim follows this shape:
 ```json
 {
   "id": "claim-id",
-  "text": "中文解释 / English explanation",
+  "text": "English explanation",
   "reliability": "R0",
   "evidence": [
     {

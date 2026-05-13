@@ -4,14 +4,11 @@
 
 # Paperflow
 
-**证据优先的 AI 论文工作台。**  
-**Evidence-first AI paper workspace.**
+**证据优先的 agentic paper 阅读工作台。**
 
 用于阅读论文、核验证据、追问 Agent、沉淀知识。Paperflow 不是普通 PDF 阅读器：每个生成结论都带 **R0 / R1 / R2** 可靠性标记，并尽可能回到 PDF 原文证据。
 
-Read papers, verify claims, ask an Agent with context, and save durable research knowledge. Paperflow is not a generic PDF reader: every generated claim is labeled **R0 / R1 / R2** and traced back to PDF evidence whenever possible.
-
-[English](./README.md) · [中文](./README.zh-CN.md) · [项目首页](./index.html)
+[英文版](./README.md) · [中文版](./README.zh-CN.md) · [项目首页](./index.html)
 
 [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-red.svg)](./LICENSE)
 [![Research-only](https://img.shields.io/badge/use-research%20only-orange.svg)](./LICENSE)
@@ -29,15 +26,13 @@ Read papers, verify claims, ask an Agent with context, and save durable research
 
 ```mermaid
 flowchart LR
-  importPdf["导入论文 Import PDF or arXiv"] --> readingReport["阅读报告 Agent Reading Report"]
-  readingReport --> evidenceHighlight["证据高亮 PDF Evidence Highlight"]
-  evidenceHighlight --> agentChat["追问 Agent Chat with R0/R1/Web Context"]
-  agentChat --> obsidianExport["沉淀笔记 Export to Obsidian"]
+  importPdf["导入 PDF 或 arXiv"] --> readingReport["Agent 阅读报告"]
+  readingReport --> evidenceHighlight["PDF 证据高亮"]
+  evidenceHighlight --> agentChat["带 R0/R1/Web 上下文追问"]
+  agentChat --> obsidianExport["导出到 Obsidian"]
 ```
 
 Paperflow 把一篇论文变成可追溯的研究工作台：先生成结构化报告，再核验 PDF 证据，然后带着证据追问 Agent，最后沉淀到 Obsidian。
-
-Paperflow turns a paper into a reliability-labeled workspace: structured report first, evidence-backed claims second, paper-aware chat third, durable notes last.
 
 ---
 
@@ -45,18 +40,18 @@ Paperflow turns a paper into a reliability-labeled workspace: structured report 
 
 <table>
   <tr>
-    <td width="20%"><img src="./assets/demo/01-import-to-report.png" alt="导入到阅读报告 / Import to Reading Report" /></td>
-    <td width="20%"><img src="./assets/demo/02-claim-to-evidence.png" alt="结论跳转到 PDF 证据 / Claim to PDF Evidence" /></td>
-    <td width="20%"><img src="./assets/demo/03-agent-chat.png" alt="带着证据追问 / Ask with Evidence" /></td>
-    <td width="20%"><img src="./assets/demo/04-reliability-model.png" alt="可靠性分级 / R0/R1/R2 Reliability" /></td>
-    <td width="20%"><img src="./assets/demo/05-obsidian-export.png" alt="导出到 Obsidian / Export to Obsidian" /></td>
+    <td width="20%"><img src="./assets/demo/zh-01-import-to-report.png" alt="导入到阅读报告" /></td>
+    <td width="20%"><img src="./assets/demo/zh-02-claim-to-evidence.png" alt="结论跳转到 PDF 证据" /></td>
+    <td width="20%"><img src="./assets/demo/zh-03-agent-chat.png" alt="带着证据追问" /></td>
+    <td width="20%"><img src="./assets/demo/zh-04-reliability-model.png" alt="可靠性分级" /></td>
+    <td width="20%"><img src="./assets/demo/zh-05-obsidian-export.png" alt="导出到 Obsidian" /></td>
   </tr>
   <tr>
-    <td><strong>导入到阅读报告</strong><br />Import to Report</td>
-    <td><strong>结论跳转证据</strong><br />Claim to Evidence</td>
-    <td><strong>带证据追问</strong><br />Ask with Evidence</td>
-    <td><strong>可靠性分级</strong><br />R0/R1/R2</td>
-    <td><strong>沉淀到知识库</strong><br />Obsidian Export</td>
+    <td><strong>导入到阅读报告</strong></td>
+    <td><strong>结论跳转证据</strong></td>
+    <td><strong>带证据追问</strong></td>
+    <td><strong>可靠性分级</strong></td>
+    <td><strong>沉淀到知识库</strong></td>
   </tr>
 </table>
 
@@ -74,33 +69,23 @@ Paperflow turns a paper into a reliability-labeled workspace: structured report 
 5. 追问 Agent："这条 limitation 的证据是什么？"
 6. 保存或更新 Obsidian 笔记。
 
-English flow:
-
-1. Import a local PDF or paste an arXiv URL.
-2. Let the Agent generate a structured Reading Report.
-3. Click a reliability-labeled claim.
-4. Jump to the supporting PDF page and highlight the evidence.
-5. Ask the Agent: "What evidence supports this limitation?"
-6. Save or update the Obsidian note.
-
 ---
 
 ## Paperflow 有什么不同
 
-- **R0/R1/R2 可靠性分级 / Reliability model**：区分当前论文事实、外部上下文和高层推断。
-- **PDF 证据定位 / PDF evidence grounding**：结论可以跳回 PDF 页面并高亮支持文本。
-- **带上下文的 Agent 对话 / Agent chat with paper + web/model context**：对话基于阅读报告、选中证据、R1 缓存，以及可选的 Web/模型知识。
-- **本地优先研究记忆 / Local-first research memory**：PDF、报告 JSON、SQLite 元数据、Obsidian 笔记保存在本地。
-- **知识库沉淀 / Obsidian export**：阅读结果变成长期知识，而不是一次性聊天记录。
+- **R0/R1/R2 可靠性分级**：区分当前论文事实、外部上下文和高层推断。
+- **PDF 证据定位**：结论可以跳回 PDF 页面并高亮支持文本。
+- **带上下文的 Agent 对话**：对话基于阅读报告、选中证据、R1 缓存，以及可选的 Web/模型知识。
+- **本地优先研究记忆**：PDF、报告 JSON、SQLite 元数据、Obsidian 笔记保存在本地。
+- **知识库沉淀**：阅读结果变成长期知识，而不是一次性聊天记录。
 
-产品原则很简单：**先报告，后聊天；始终回到证据。**  
-Product stance: **report first, chat second, evidence always**.
+产品原则很简单：**先报告，后聊天；始终回到证据。**
 
 ---
 
-## News
+## 最新动态
 
-- **2026-05-13 — v0.7 发布。** Paperflow 现在以证据优先的 AI 论文工作台对外呈现：双语 README 叙事、PDF 原文证据高亮、响应式 PDF 搜索、Agent 对话 grounding、本地优先研究记忆，以及 Obsidian 导出。
+- **2026-05-13 — v0.1 发布。** Paperflow 现在以证据优先的 agentic paper 阅读工作台对外呈现：PDF 原文证据高亮、响应式 PDF 搜索、Agent 对话 grounding、本地优先研究记忆，以及 Obsidian 导出。以后小功能发版使用 `v0.1.x` 格式。
 
 ---
 
@@ -134,7 +119,7 @@ cd paperflow
 1. 导入本地 PDF，或粘贴 arXiv URL。
 2. 等待 Agent 从 PDF 解析进入动态部分报告。
 3. 首个 chunk 完成后先看关键发现，完整报告会继续补全。
-4. 打开 Reading Report，检查 R0 / R1 / R2 claim。
+4. 打开阅读报告，检查 R0 / R1 / R2 结论。
 5. 点击 claim 或 evidence，查看原文证据和 PDF 位置。
 6. 在右侧 Agent 对话区基于当前论文继续追问。
 7. 保存或更新 Obsidian 笔记。
@@ -150,7 +135,7 @@ Paperflow 当前只支持 DeepSeek 作为 Agent API provider。
 | --- | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | 是 | 无 | 后端 PaperAgent 使用的 DeepSeek API Key。 |
 | `DEEPSEEK_BASE_URL` | 否 | `https://api.deepseek.com/beta` | DeepSeek-compatible chat completions endpoint root。 |
-| `DEEPSEEK_MODEL` | 否 | `deepseek-v4-flash` | Reading Report 默认模型。 |
+| `DEEPSEEK_MODEL` | 否 | `deepseek-v4-flash` | 阅读报告默认模型。 |
 | `DEEPSEEK_REPORT_READ_TIMEOUT` | 否 | `90` | 报告生成 read timeout，单位秒。 |
 | `DEEPSEEK_CONFIG_PATH` | 否 | `~/.deepseek/config.toml` | 自定义配置文件路径。 |
 
@@ -164,7 +149,7 @@ model = "deepseek-v4-flash"
 
 旧 DeepSeek-TUI 配置里的 `default_text_model` 不会覆盖 Paperflow 的默认报告模型。除非显式设置 `DEEPSEEK_MODEL` 或 `model`，否则默认使用 `deepseek-v4-flash`。
 
-没有 DeepSeek Key 时，后端会报告 `Agent not configured`，无法生成真实 R0/R1 Reading Report。
+没有 DeepSeek Key 时，后端会报告 `Agent not configured`，无法生成真实 R0/R1 阅读报告。
 
 ---
 
@@ -231,7 +216,7 @@ python -m paperflow_tui
 
 ## 核心功能
 
-### 动态 Reading Report
+### 动态阅读报告
 
 - **长论文分 chunk 读取**：不再只截取 PDF 前面一段。
 - **动态部分报告**：首个 chunk 完成后立即保存，读者可以先看关键发现。
@@ -323,14 +308,14 @@ Agent harness 只在后端。Web 前端和 TUI 都是薄 HTTP client。
 ```json
 {
   "id": "claim-id",
-  "text": "中文解释 / English explanation",
+  "text": "中文解释",
   "reliability": "R0",
   "evidence": [
     {
       "source": "paper.pdf",
-      "quote": "verbatim quote from the PDF",
+      "quote": "PDF 原文引用",
       "page": 3,
-      "section": "Method",
+      "section": "方法",
       "bbox": null,
       "location_status": "page_and_quote"
     }
@@ -339,7 +324,7 @@ Agent harness 只在后端。Web 前端和 TUI 都是薄 HTTP client。
 }
 ```
 
-完整 Reading Report 覆盖 metadata、executive summary、task、dataset、benchmark/metric、method、model scale、input/output、compute/training、key results、strengths、limitations、related-work claims 和 evidence index。
+完整阅读报告覆盖元数据、执行摘要、任务、数据集、基准与指标、方法、模型规模、输入输出、计算与训练、关键结果、优势、局限、相关工作结论和证据索引。
 
 ---
 
@@ -398,16 +383,16 @@ Paperflow 还在早期，但 reliability contract 已经稳定。适合优先贡
 
 ---
 
-## License
+## 授权
 
 Paperflow 使用 [**PolyForm Noncommercial License 1.0.0**](./LICENSE)。
 
 - 可自由用于非商业目的，包括学术研究、教学、个人学习、公益 / 教育 / 政府 / 公共研究组织内部使用。
 - 未经单独商业授权，不可用于商业目的，包括付费托管、嵌入商业产品、公司内部生产工具等。
-- fork 和衍生作品必须保留该 license 和 [`LICENSE`](./LICENSE) 中的 `Required Notice`。
+- fork 和衍生作品必须保留该授权和 [`LICENSE`](./LICENSE) 中的必要声明。
 - 软件按现状提供，不含任何担保。
 
-商业使用请在 [GitHub repository](https://github.com/shiml20/PaperFlow) 开 issue 讨论商业授权。
+商业使用请在 [GitHub 仓库](https://github.com/shiml20/PaperFlow) 开 issue 讨论商业授权。
 
 Copyright © 2026 shiml20 and Paperflow contributors.
 
@@ -415,8 +400,8 @@ Copyright © 2026 shiml20 and Paperflow contributors.
 
 ## 致谢
 
-- Agent integration 基于 DeepSeek API，并可复用 DeepSeek-TUI CLI 写入的配置。
-- PDF parsing 基于 [PyMuPDF](https://github.com/pymupdf/PyMuPDF)。
+- Agent 集成基于 DeepSeek API，并可复用 DeepSeek-TUI CLI 写入的配置。
+- PDF 解析基于 [PyMuPDF](https://github.com/pymupdf/PyMuPDF)。
 - 前端基于 [Vite](https://vitejs.dev/) 和 [React](https://react.dev/)。
 - Prompt 设计受到彭思达开源科研经验文档 [pengsida/learning_research](https://github.com/pengsida/learning_research) 的启发。
 
@@ -424,6 +409,6 @@ Copyright © 2026 shiml20 and Paperflow contributors.
 
 ---
 
-## Status
+## 项目状态
 
-发版历史与里程碑细节见 [`STATUS.md`](./STATUS.md)。
+发版历史与里程碑细节见 [`STATUS.zh-CN.md`](./STATUS.zh-CN.md)。
