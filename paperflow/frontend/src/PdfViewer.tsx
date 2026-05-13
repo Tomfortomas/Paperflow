@@ -44,6 +44,10 @@ type HighlightStyle = {
   height: number;
   maxHeight?: number;
 };
+type PdfSearchMatch = {
+  page: number;
+  quote: string;
+};
 
 export function PdfViewer({
   pdfUrl,
@@ -67,6 +71,10 @@ export function PdfViewer({
   const [containerWidth, setContainerWidth] = useState(0);
   const [pageInput, setPageInput] = useState(String(page));
   const [zoom, setZoom] = useState("fit");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchMatches, setSearchMatches] = useState<PdfSearchMatch[]>([]);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
+  const [searchStatus, setSearchStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const safePage = clampPage(page, numPages || page);
@@ -223,6 +231,48 @@ export function PdfViewer({
     goToPage(parsed);
   }
 
+  async function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = searchInput.trim();
+    if (!pdfDoc || !query) {
+      setSearchMatches([]);
+      setActiveSearchIndex(-1);
+      setSearchStatus("");
+      return;
+    }
+
+    const nextMatches: PdfSearchMatch[] = [];
+    const needle = normalizeTextForMatch(query);
+    for (const pageNumber of pageNumbers) {
+      const pdfPage = await pdfDoc.getPage(pageNumber);
+      const textContent = await pdfPage.getTextContent();
+      if (normalizeTextForMatch(textContentToString(textContent)).includes(needle)) {
+        nextMatches.push({ page: pageNumber, quote: query });
+      }
+    }
+
+    setSearchMatches(nextMatches);
+    if (nextMatches.length === 0) {
+      setActiveSearchIndex(-1);
+      setSearchStatus("No matches");
+      return;
+    }
+
+    setActiveSearchIndex(0);
+    setSearchStatus(`1 / ${nextMatches.length} match${nextMatches.length === 1 ? "" : "es"}`);
+    goToPage(nextMatches[0].page);
+  }
+
+  function goToSearchMatch(nextIndex: number) {
+    if (searchMatches.length === 0) return;
+    const wrappedIndex = (nextIndex + searchMatches.length) % searchMatches.length;
+    setActiveSearchIndex(wrappedIndex);
+    setSearchStatus(
+      `${wrappedIndex + 1} / ${searchMatches.length} match${searchMatches.length === 1 ? "" : "es"}`,
+    );
+    goToPage(searchMatches[wrappedIndex].page);
+  }
+
   function bumpZoomSlightly(current: string): string {
     if (current === "fit") return "110";
     const n = Number(current);
@@ -246,6 +296,12 @@ export function PdfViewer({
     if (n >= 110) return "fit";
     return "fit";
   }
+
+  const activeSearchHighlight =
+    activeSearchIndex >= 0 && searchMatches[activeSearchIndex]
+      ? searchMatches[activeSearchIndex]
+      : null;
+  const activeHighlight = activeSearchHighlight ?? highlight;
 
   return (
     <div className="pdf-viewer" ref={containerRef}>
@@ -318,6 +374,35 @@ export function PdfViewer({
             <option value="200">200%</option>
           </select>
         </div>
+        <form className="pdf-viewer-search" onSubmit={handleSearchSubmit}>
+          <label>
+            <span>Search</span>
+            <input
+              aria-label="Search PDF text"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Find text"
+            />
+          </label>
+          <button type="submit">Search PDF</button>
+          <button
+            type="button"
+            aria-label="Previous PDF search match"
+            disabled={searchMatches.length === 0}
+            onClick={() => goToSearchMatch(activeSearchIndex - 1)}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            aria-label="Next PDF search match"
+            disabled={searchMatches.length === 0}
+            onClick={() => goToSearchMatch(activeSearchIndex + 1)}
+          >
+            ↓
+          </button>
+          {searchStatus ? <span className="pdf-viewer-search-status">{searchStatus}</span> : null}
+        </form>
       </div>
       {error ? <p className="warning">{error}</p> : null}
       <div className="pdf-viewer-pages" ref={pagesRef} aria-label="PDF pages">
@@ -325,7 +410,7 @@ export function PdfViewer({
           ? pageNumbers.map((pageNumber) => (
               <PdfPage
                 containerWidth={containerWidth}
-                highlight={highlight}
+                highlight={activeHighlight}
                 key={pageNumber}
                 maxFitScale={scale}
                 onPageElement={(element) => {
@@ -729,6 +814,12 @@ function textItemRect(item: unknown, viewport: unknown, index: number): TextItem
 
 function normalizeTextForMatch(value: string): string {
   return value.toLowerCase().replace(/\s+/g, "");
+}
+
+function textContentToString(textContent: unknown): string {
+  return ((textContent as { items?: unknown[] })?.items ?? [])
+    .map((item) => ((item as { str?: unknown }).str ?? "").toString())
+    .join(" ");
 }
 
 function effectivePageBbox(

@@ -17,7 +17,7 @@ const pdfPage = {
 const pdfDocument = {
   numPages: 3,
   destroy: vi.fn(),
-  getPage: vi.fn(async () => pdfPage),
+  getPage: vi.fn(async (_pageNumber?: number) => pdfPage),
 };
 
 vi.mock("pdfjs-dist", () => ({
@@ -237,6 +237,44 @@ describe("PdfViewer", () => {
       expect(highlight?.style.left).toBe("8px");
       expect(highlight?.style.top).toBe("18px");
       expect(highlight?.style.width).toBe("194px");
+    });
+  });
+
+  it("searches PDF text and jumps to the next matching page", async () => {
+    const user = userEvent.setup();
+    pdfDocument.numPages = 2;
+    pdfDocument.getPage.mockImplementation(async (pageNumber?: number) => ({
+      ...pdfPage,
+      getTextContent: vi.fn(async () => ({
+        items:
+          pageNumber === 2
+            ? [
+                { str: "This page discusses ", transform: [1, 0, 0, 10, 10, 20], width: 150, height: 10 },
+                { str: "reinforcement learning", transform: [1, 0, 0, 10, 160, 20], width: 180, height: 10 },
+              ]
+            : [{ str: "unrelated abstract", transform: [1, 0, 0, 10, 10, 20], width: 120, height: 10 }],
+      })),
+    }));
+    const onPageChange = vi.fn();
+
+    const { container } = render(
+      <PdfViewer
+        pdfUrl="http://127.0.0.1:8000/paper.pdf"
+        page={1}
+        onPageChange={onPageChange}
+      />,
+    );
+
+    await screen.findByText("Page 2");
+    await user.type(screen.getByLabelText(/Search PDF text/i), "reinforcement learning");
+    await user.click(screen.getByRole("button", { name: /Search PDF/i }));
+
+    await waitFor(() => expect(onPageChange).toHaveBeenCalledWith(2));
+    expect(screen.getByText("1 / 1 match")).toBeInTheDocument();
+    await waitFor(() => {
+      const highlight = container.querySelector(".pdf-viewer-highlight") as HTMLElement | null;
+      expect(highlight).toBeInTheDocument();
+      expect(highlight?.style.left).toBe("158px");
     });
   });
 

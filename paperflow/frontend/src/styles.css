@@ -2791,13 +2791,15 @@ input[type="file"]::file-selector-button:hover {
   color: var(--ink-3);
 }
 .pdf-viewer-page-form,
-.pdf-viewer-zoom {
+.pdf-viewer-zoom,
+.pdf-viewer-search {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
 }
 .pdf-viewer-page-form label,
-.pdf-viewer-zoom {
+.pdf-viewer-zoom,
+.pdf-viewer-search label {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -2813,6 +2815,15 @@ input[type="file"]::file-selector-button:hover {
 }
 .pdf-viewer-zoom select {
   min-width: 5rem;
+}
+.pdf-viewer-search input {
+  width: min(14rem, 22vw);
+}
+.pdf-viewer-search-status {
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  white-space: nowrap;
 }
 
 /* Compact zoom step buttons (− / +) next to zoom preset */
