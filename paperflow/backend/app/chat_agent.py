@@ -36,11 +36,14 @@ def generate_chat_response(
     web_search_mode: str = "auto",
 ) -> PaperChatResponse:
     selected = _selected_evidence(report, request)
+    may_use_model_knowledge = _may_use_model_knowledge(question)
     used_context = ["report"]
     if selected:
         used_context.append("selected_evidence")
     if r1_cache and r1_cache.get("items"):
         used_context.append("r1_cache")
+    if may_use_model_knowledge:
+        used_context.append("model_knowledge")
 
     web_results: list[WebSearchResult] = []
     web_step_status = "skipped"
@@ -88,6 +91,7 @@ def generate_chat_response(
                 r1_cache=r1_cache,
                 selected=selected,
                 web_results=web_results,
+                may_use_model_knowledge=may_use_model_knowledge,
             )
         except Exception as exc:
             answer = _fallback_answer(report, request, question, web_results=web_results)
@@ -183,9 +187,16 @@ def _ask_deepseek(
     r1_cache: Optional[dict],
     selected: list[Evidence],
     web_results: list[WebSearchResult],
+    may_use_model_knowledge: bool,
 ) -> Claim:
     context = {
         "question": question,
+        "answer_policy": {
+            "may_use_general_model_knowledge": may_use_model_knowledge,
+            "general_model_knowledge_reliability": "R2",
+            "paper_evidence_reliability": "R0",
+            "related_work_reliability": "R1",
+        },
         "selected": {
             "claim_id": request.selected_claim_id,
             "evidence_id": request.selected_evidence_id,
@@ -213,7 +224,12 @@ def _ask_deepseek(
     }
     prompt = (
         "You are Paperflow's evidence-grounded paper chat agent. Answer in Simplified Chinese. "
-        "Use only the JSON context. Prefer current-paper evidence over all other context. "
+        "Prefer current-paper evidence when the user asks about this paper, selected claims, or PDF evidence. "
+        "For broad definition/background questions, if answer_policy.may_use_general_model_knowledge is true, "
+        "you may use general model knowledge even when the paper context does not define the concept; do not refuse "
+        "solely because the current paper is about a different topic. "
+        "When using general model knowledge, label the answer R2, keep evidence empty unless web_context is cited, "
+        "and set uncertainty to say the answer is general background rather than current-paper evidence. "
         "When web_context is used, label it as external web context and cite source URLs. "
         "Return strict JSON with this schema: "
         '{"answer":{"text":string,"reliability":"R0|R1|R2","evidence":[evidence],"uncertainty":string|null},'
@@ -379,6 +395,34 @@ def _should_web_search(
     return False
 
 
+def _may_use_model_knowledge(question: str) -> bool:
+    lowered = question.lower()
+    paper_scoped_markers = [
+        "这篇",
+        "本文",
+        "论文",
+        "paper",
+        "claim",
+        "证据",
+        "实验",
+        "结果",
+    ]
+    if any(marker in lowered for marker in paper_scoped_markers):
+        return False
+    triggers = [
+        "什么是",
+        "是什么",
+        "介绍一下",
+        "背景",
+        "what is",
+        "define",
+        "definition",
+        "overview",
+        "explain",
+    ]
+    return any(trigger in lowered for trigger in triggers)
+
+
 def _is_broad_question(question: str) -> bool:
     lowered = question.lower()
     triggers = [
@@ -399,7 +443,13 @@ def _is_broad_question(question: str) -> bool:
     return any(trigger in lowered for trigger in triggers)
 
 
+def _is_general_background_question(question: str) -> bool:
+    return _may_use_model_knowledge(question)
+
+
 def _web_search_query(question: str, report: ReadingReport) -> str:
+    if _is_general_background_question(question):
+        return question
     title = (report.paper_title or "").strip()
     if title:
         return f"{question} {title}"
