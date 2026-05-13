@@ -24,6 +24,13 @@ vi.mock("pdfjs-dist", () => ({
   GlobalWorkerOptions: {},
   getDocument: vi.fn(() => ({ promise: Promise.resolve(pdfDocument) })),
   renderTextLayer: vi.fn(),
+  TextLayer: class {
+    constructor(_opts: unknown) {}
+    async render() {
+      return undefined;
+    }
+    cancel() {}
+  },
 }));
 
 vi.mock("pdfjs-dist/build/pdf.worker.min.mjs?url", () => ({
@@ -232,11 +239,15 @@ describe("PdfViewer", () => {
     );
 
     await waitFor(() => {
-      const highlight = container.querySelector(".pdf-viewer-highlight") as HTMLElement | null;
-      expect(highlight).toBeInTheDocument();
-      expect(highlight?.style.left).toBe("8px");
-      expect(highlight?.style.top).toBe("18px");
-      expect(highlight?.style.width).toBe("194px");
+      const highlights = container.querySelectorAll(".pdf-viewer-highlight");
+      expect(highlights.length).toBe(2);
+      const first = highlights[0] as HTMLElement;
+      const second = highlights[1] as HTMLElement;
+      expect(first.style.left).toBe("8px");
+      expect(first.style.top).toBe("18px");
+      expect(first.style.width).toBe("84px");
+      expect(second.style.left).toBe("88px");
+      expect(second.style.width).toBe("114px");
     });
   });
 
@@ -245,6 +256,11 @@ describe("PdfViewer", () => {
     pdfDocument.numPages = 2;
     pdfDocument.getPage.mockImplementation(async (pageNumber?: number) => ({
       ...pdfPage,
+      getViewport: ({ scale }: { scale: number }) => ({
+        width: 600 * scale,
+        height: 800 * scale,
+        transform: [scale, 0, 0, -scale, 0, 800 * scale],
+      }),
       getTextContent: vi.fn(async () => ({
         items:
           pageNumber === 2
@@ -267,14 +283,14 @@ describe("PdfViewer", () => {
 
     await screen.findByText("Page 2");
     await user.type(screen.getByLabelText(/Search PDF text/i), "reinforcement learning");
-    await user.click(screen.getByRole("button", { name: /Search PDF/i }));
+    await user.click(screen.getByRole("button", { name: /^Search$/i }));
 
     await waitFor(() => expect(onPageChange).toHaveBeenCalledWith(2));
     expect(screen.getByText("1 / 1 match")).toBeInTheDocument();
     await waitFor(() => {
       const highlight = container.querySelector(".pdf-viewer-highlight") as HTMLElement | null;
       expect(highlight).toBeInTheDocument();
-      expect(highlight?.style.left).toBe("158px");
+      expect(highlight?.style.left).toBe("222px");
     });
   });
 

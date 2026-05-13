@@ -306,73 +306,83 @@ export function PdfViewer({
   return (
     <div className="pdf-viewer" ref={containerRef}>
       <div className="pdf-viewer-toolbar" ref={toolbarRef}>
-        <button
-          type="button"
-          onClick={() => goToPage(safePage - 1)}
-          disabled={safePage <= 1}
-        >
-          ‹ Prev
-        </button>
-        <span className="pdf-viewer-page-indicator">
-          Page {safePage}
-          {numPages ? ` / ${numPages}` : ""}
-        </span>
-        <form className="pdf-viewer-page-form" onSubmit={handlePageSubmit}>
-          <label>
-            <span>PDF page</span>
-            <input
-              aria-label="PDF page"
-              inputMode="numeric"
-              min={1}
-              max={numPages || undefined}
-              value={pageInput}
-              onChange={(event) => setPageInput(event.target.value)}
-            />
-          </label>
-          <button type="submit">Go</button>
-        </form>
-        <button
-          type="button"
-          onClick={() => goToPage(safePage + 1)}
-          disabled={numPages > 0 && safePage >= numPages}
-        >
-          Next ›
-        </button>
-        <div className="pdf-viewer-zoom">
-          <span>Zoom</span>
+        <div className="pdf-viewer-toolbar-main">
           <button
             type="button"
-            className="pdf-viewer-zoom-step"
-            aria-label="Slightly shrink PDF"
-            disabled={zoom === "fit"}
-            title="Step down zoom: 200% → … → Fit"
-            onClick={() => setZoom((z) => bumpZoomSmaller(z))}
+            className="pdf-viewer-nav-btn"
+            aria-label="Previous page"
+            onClick={() => goToPage(safePage - 1)}
+            disabled={safePage <= 1}
           >
-            −
+            <span aria-hidden>‹</span>
+            <span className="pdf-viewer-nav-btn-label"> Prev</span>
           </button>
+          <span className="pdf-viewer-page-indicator">
+            Page {safePage}
+            {numPages ? ` / ${numPages}` : ""}
+          </span>
+          <form className="pdf-viewer-page-form" onSubmit={handlePageSubmit}>
+            <label>
+              <span>PDF page</span>
+              <input
+                aria-label="PDF page"
+                inputMode="numeric"
+                min={1}
+                max={numPages || undefined}
+                value={pageInput}
+                onChange={(event) => setPageInput(event.target.value)}
+              />
+            </label>
+            <button type="submit" aria-label="Go to page">
+              Go
+            </button>
+          </form>
           <button
             type="button"
-            className="pdf-viewer-zoom-step"
-            aria-label="Slightly enlarge PDF"
-            disabled={zoom === "200"}
-            title="Step up zoom: Fit → 110% → … → 200%"
-            onClick={() => setZoom((z) => bumpZoomSlightly(z))}
+            className="pdf-viewer-nav-btn"
+            aria-label="Next page"
+            onClick={() => goToPage(safePage + 1)}
+            disabled={numPages > 0 && safePage >= numPages}
           >
-            +
+            <span className="pdf-viewer-nav-btn-label">Next </span>
+            <span aria-hidden>›</span>
           </button>
-          <select
-            aria-label="PDF zoom"
-            value={zoom}
-            onChange={(event) => setZoom(event.target.value)}
-          >
-            <option value="fit">Fit</option>
-            <option value="100">100%</option>
-            <option value="110">110%</option>
-            <option value="125">125%</option>
-            <option value="150">150%</option>
-            <option value="175">175%</option>
-            <option value="200">200%</option>
-          </select>
+          <div className="pdf-viewer-zoom">
+            <span>Zoom</span>
+            <button
+              type="button"
+              className="pdf-viewer-zoom-step"
+              aria-label="Slightly shrink PDF"
+              disabled={zoom === "fit"}
+              title="Step down zoom: 200% → … → Fit"
+              onClick={() => setZoom((z) => bumpZoomSmaller(z))}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="pdf-viewer-zoom-step"
+              aria-label="Slightly enlarge PDF"
+              disabled={zoom === "200"}
+              title="Step up zoom: Fit → 110% → … → 200%"
+              onClick={() => setZoom((z) => bumpZoomSlightly(z))}
+            >
+              +
+            </button>
+            <select
+              aria-label="PDF zoom"
+              value={zoom}
+              onChange={(event) => setZoom(event.target.value)}
+            >
+              <option value="fit">Fit</option>
+              <option value="100">100%</option>
+              <option value="110">110%</option>
+              <option value="125">125%</option>
+              <option value="150">150%</option>
+              <option value="175">175%</option>
+              <option value="200">200%</option>
+            </select>
+          </div>
         </div>
         <form className="pdf-viewer-search" onSubmit={handleSearchSubmit}>
           <label>
@@ -384,7 +394,9 @@ export function PdfViewer({
               placeholder="Find text"
             />
           </label>
-          <button type="submit">Search PDF</button>
+          <button type="submit" title="Search entire PDF for this text">
+            Search
+          </button>
           <button
             type="button"
             aria-label="Previous PDF search match"
@@ -467,7 +479,7 @@ function PdfPage({
   const lastScrolledHighlightKeyRef = useRef<string | null>(null);
   const [renderedSize, setRenderedSize] = useState<{ width: number; height: number } | null>(null);
   const [renderedScale, setRenderedScale] = useState(1);
-  const [textMatchStyle, setTextMatchStyle] = useState<HighlightStyle | null>(null);
+  const [textMatchSegments, setTextMatchSegments] = useState<HighlightStyle[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -479,11 +491,12 @@ function PdfPage({
     if (!canvasRef.current) return;
     let cancelled = false;
     let renderTask: PdfRenderTask | null = null;
+    let textLayerTask: { cancel?: () => void } | null = null;
 
     (async () => {
       try {
         setError(null);
-        setTextMatchStyle(null);
+        setTextMatchSegments([]);
         const pdfPage = await pdfDoc.getPage(pageNumber);
         if (cancelled) return;
         const naturalViewport = pdfPage.getViewport({ scale: 1 });
@@ -522,18 +535,32 @@ function PdfPage({
           const textContent = await pdfPage.getTextContent();
           if (cancelled) return;
           if (highlight?.page === pageNumber && !highlight.bbox && highlight.quote) {
-            setTextMatchStyle(findTextHighlightStyle(textContent, highlight.quote, viewport));
+            setTextMatchSegments(findTextHighlightSegments(textContent, highlight.quote, viewport));
           }
-          const renderTextLayer = (pdfModule as unknown as {
-            renderTextLayer?: (params: Record<string, unknown>) => unknown;
-          }).renderTextLayer;
-          if (typeof renderTextLayer === "function") {
-            renderTextLayer({
+          const TextLayerCtor = pdfModule.TextLayer;
+          if (typeof TextLayerCtor === "function") {
+            const layer = new TextLayerCtor({
               textContentSource: textContent,
               container: textLayer,
               viewport,
-              textDivs: [],
             });
+            textLayerTask = layer;
+            await layer.render();
+            if (cancelled) {
+              layer.cancel?.();
+            }
+          } else {
+            const renderTextLayer = (pdfModule as unknown as {
+              renderTextLayer?: (params: Record<string, unknown>) => unknown;
+            }).renderTextLayer;
+            if (typeof renderTextLayer === "function") {
+              renderTextLayer({
+                textContentSource: textContent,
+                container: textLayer,
+                viewport,
+                textDivs: [],
+              });
+            }
           }
         }
       } catch (caught) {
@@ -546,6 +573,12 @@ function PdfPage({
     return () => {
       cancelled = true;
       try {
+        textLayerTask?.cancel?.();
+      } catch {
+        // TextLayer.cancel can throw if nothing started; ignore.
+      }
+      textLayerTask = null;
+      try {
         renderTask?.cancel?.();
       } catch {
         // PDF.js can throw if the task has already settled; cleanup should stay silent.
@@ -553,35 +586,53 @@ function PdfPage({
     };
   }, [containerWidth, highlight, maxFitScale, pageNumber, pdfDoc, pdfModule, zoom]);
 
-  const highlightStyle: HighlightStyle | null = (() => {
+  const bboxHighlightStyle: HighlightStyle | null =
+    highlight && highlight.page === pageNumber && renderedSize && highlight.bbox
+      ? (() => {
+          const [, , , pageHeight] = effectivePageBbox(pageSizes, renderedSize);
+          const [x0, y0, x1, y1] = highlight.bbox;
+          return {
+            left: x0 * renderedScale,
+            top: y0 * renderedScale,
+            width: Math.max(2, (x1 - x0) * renderedScale),
+            height: Math.max(2, (y1 - y0) * renderedScale),
+            maxHeight: pageHeight,
+          };
+        })()
+      : null;
+
+  const highlightScrollKey = (() => {
     if (!highlight || highlight.page !== pageNumber || !renderedSize) {
       return null;
     }
-    if (!highlight.bbox) {
-      return textMatchStyle;
+    if (bboxHighlightStyle) {
+      return [
+        "bbox",
+        highlight.page,
+        highlight.bbox?.join(",") ?? "",
+        renderedScale,
+        renderedSize.width,
+        renderedSize.height,
+        Math.round(bboxHighlightStyle.left),
+        Math.round(bboxHighlightStyle.top),
+      ].join(":");
     }
-    const [, , , pageHeight] = effectivePageBbox(pageSizes, renderedSize);
-    const [x0, y0, x1, y1] = highlight.bbox;
-    return {
-      left: x0 * renderedScale,
-      top: y0 * renderedScale,
-      width: Math.max(2, (x1 - x0) * renderedScale),
-      height: Math.max(2, (y1 - y0) * renderedScale),
-      maxHeight: pageHeight,
-    };
+    if (textMatchSegments.length > 0) {
+      const first = textMatchSegments[0];
+      return [
+        "text",
+        highlight.page,
+        normalizeTextForMatch(highlight.quote ?? "").slice(0, 80),
+        renderedScale,
+        renderedSize.width,
+        renderedSize.height,
+        textMatchSegments.map((s) => [Math.round(s.left), Math.round(s.top), Math.round(s.width), Math.round(s.height)].join(",")).join("|"),
+        Math.round(first.left),
+        Math.round(first.top),
+      ].join(":");
+    }
+    return null;
   })();
-  const highlightScrollKey =
-    highlight && highlight.page === pageNumber && renderedSize && highlightStyle
-      ? [
-          highlight.page,
-          highlight.bbox?.join(",") ?? normalizeTextForMatch(highlight.quote ?? "").slice(0, 80),
-          renderedScale,
-          renderedSize.width,
-          renderedSize.height,
-          Math.round(highlightStyle.left),
-          Math.round(highlightStyle.top),
-        ].join(":")
-      : null;
 
   useEffect(() => {
     if (!highlightScrollKey || !highlightRef.current) {
@@ -592,7 +643,7 @@ function PdfPage({
     }
     lastScrolledHighlightKeyRef.current = highlightScrollKey;
     onHighlightElement(highlightRef.current);
-  }, [highlightScrollKey]);
+  }, [highlightScrollKey, onHighlightElement]);
 
   function handleMouseUp() {
     if (!onSelection) return;
@@ -610,15 +661,26 @@ function PdfPage({
       <div className="pdf-viewer-canvas-wrap" onMouseUp={handleMouseUp}>
         <canvas ref={canvasRef} className="pdf-viewer-canvas" />
         <div ref={textLayerRef} className="pdf-viewer-text-layer" />
-        {highlightStyle && highlightScrollKey ? (
+        {bboxHighlightStyle && highlightScrollKey ? (
           <div
             key={highlightScrollKey}
             className="pdf-viewer-highlight"
             ref={highlightRef}
-            style={highlightStyle}
+            style={bboxHighlightStyle}
             aria-hidden
           />
         ) : null}
+        {!bboxHighlightStyle && highlightScrollKey
+          ? textMatchSegments.map((segmentStyle, segmentIndex) => (
+              <div
+                key={`${highlightScrollKey}:${segmentIndex}`}
+                className="pdf-viewer-highlight"
+                ref={segmentIndex === 0 ? highlightRef : undefined}
+                style={segmentStyle}
+                aria-hidden
+              />
+            ))
+          : null}
       </div>
     </article>
   );
@@ -727,60 +789,119 @@ function getVisiblePage(
   return closest?.page ?? null;
 }
 
-function findTextHighlightStyle(
+/** One rectangle per PDF text run that intersects the match (sliced within a run). */
+function findTextHighlightSegments(
   textContent: unknown,
   quote: string,
   viewport: unknown,
-): HighlightStyle | null {
+): HighlightStyle[] {
   const needle = normalizeTextForMatch(quote).slice(0, 240);
-  if (needle.length < 8) {
-    return null;
+  if (needle.length === 0) {
+    return [];
   }
 
   const items = ((textContent as { items?: unknown[] })?.items ?? [])
     .map((item, index) => textItemRect(item, viewport, index))
     .filter((item): item is TextItemRect => item !== null);
   if (items.length === 0) {
-    return null;
+    return [];
   }
 
   const haystack: string[] = [];
-  const indexToItem: number[] = [];
+  const meta: { itemIndex: number; charInItem: number }[] = [];
   items.forEach((item, itemIndex) => {
-    for (const char of normalizeTextForMatch(item.text)) {
-      haystack.push(char);
-      indexToItem.push(itemIndex);
+    const norm = normalizeTextForMatch(item.text);
+    for (let c = 0; c < norm.length; c++) {
+      haystack.push(norm[c]!);
+      meta.push({ itemIndex, charInItem: c });
     }
   });
 
-  const start = haystack.join("").indexOf(needle);
+  const full = haystack.join("");
+  const start = full.indexOf(needle);
   if (start < 0) {
-    return null;
+    return [];
   }
   const end = start + needle.length - 1;
-  const firstItem = indexToItem[start];
-  const lastItem = indexToItem[end];
-  if (firstItem === undefined || lastItem === undefined) {
-    return null;
+  if (meta[start] === undefined || meta[end] === undefined) {
+    return [];
   }
 
-  const matchedItems = items.slice(firstItem, lastItem + 1);
-  const left = Math.min(...matchedItems.map((item) => item.left));
-  const top = Math.min(...matchedItems.map((item) => item.top));
-  const right = Math.max(...matchedItems.map((item) => item.left + item.width));
-  const bottom = Math.max(...matchedItems.map((item) => item.top + item.height));
+  const groups: { itemIndex: number; charStart: number; charEnd: number }[] = [];
+  for (let k = start; k <= end; k++) {
+    const m = meta[k];
+    if (!m) {
+      break;
+    }
+    const prev = groups[groups.length - 1];
+    if (prev && prev.itemIndex === m.itemIndex) {
+      prev.charEnd = m.charInItem;
+    } else {
+      groups.push({ itemIndex: m.itemIndex, charStart: m.charInItem, charEnd: m.charInItem });
+    }
+  }
+
+  const segments: HighlightStyle[] = [];
+  for (const g of groups) {
+    const item = items[g.itemIndex];
+    if (!item) {
+      continue;
+    }
+    const slice = sliceHighlightWithinTextItem(item, g.charStart, g.charEnd);
+    if (slice) {
+      segments.push(slice);
+    }
+  }
+  return segments;
+}
+
+function sliceHighlightWithinTextItem(
+  item: TextItemRect,
+  charStart: number,
+  charEndInclusive: number,
+): HighlightStyle | null {
+  const norm = normalizeTextForMatch(item.text);
+  const len = norm.length;
+  if (len === 0) {
+    return null;
+  }
+  const start = Math.max(0, Math.min(charStart, len - 1));
+  const end = Math.max(start, Math.min(charEndInclusive, len - 1));
+  const startFrac = start / len;
+  const endFrac = (end + 1) / len;
+  const subLeft = item.left + item.width * startFrac;
+  const subWidth = Math.max(2, item.width * (endFrac - startFrac));
   return {
-    left: Math.max(0, left - 2),
-    top: Math.max(0, top - 2),
-    width: Math.max(2, right - left + 4),
-    height: Math.max(2, bottom - top + 4),
+    left: Math.max(0, subLeft - 2),
+    top: Math.max(0, item.top - 2),
+    width: Math.max(2, subWidth + 4),
+    height: Math.max(2, item.height + 4),
   };
+}
+
+function toAffine6(matrix: unknown): number[] | null {
+  if (matrix == null) {
+    return null;
+  }
+  if (Array.isArray(matrix) && matrix.length >= 6) {
+    const out = matrix.slice(0, 6).map(Number);
+    return out.every(Number.isFinite) ? out : null;
+  }
+  if (ArrayBuffer.isView(matrix)) {
+    const view = matrix as unknown as { length: number; [index: number]: number };
+    if (view.length < 6) {
+      return null;
+    }
+    const out = Array.from({ length: 6 }, (_, i) => Number(view[i]));
+    return out.every(Number.isFinite) ? out : null;
+  }
+  return null;
 }
 
 function textItemRect(item: unknown, viewport: unknown, index: number): TextItemRect | null {
   const text = typeof (item as { str?: unknown }).str === "string" ? (item as { str: string }).str : "";
-  const transform = (item as { transform?: unknown }).transform;
-  if (!text.trim() || !Array.isArray(transform) || transform.length < 6) {
+  const transform = toAffine6((item as { transform?: unknown }).transform);
+  if (!text.trim() || !transform) {
     return null;
   }
 
@@ -792,12 +913,32 @@ function textItemRect(item: unknown, viewport: unknown, index: number): TextItem
     return null;
   }
 
+  const viewportTransform = toAffine6((viewport as { transform?: unknown })?.transform);
+  if (viewportTransform) {
+    const transformed = multiplyTransform(viewportTransform, transform);
+    if (transformed) {
+      const scaleX = Math.hypot(Number(viewportTransform[0]), Number(viewportTransform[1])) || 1;
+      const itemHeight = Math.max(1, Math.abs(transformed[3]));
+      return {
+        text,
+        index,
+        left: transformed[4],
+        top: transformed[5] - itemHeight,
+        width: Math.max(1, width * scaleX),
+        height: itemHeight,
+      };
+    }
+  }
+
   const rect = [x, y, x + Math.max(1, width), y + Math.max(1, height)];
   const converter = (viewport as {
     convertToViewportRectangle?: (rect: number[]) => number[];
   })?.convertToViewportRectangle;
   const converted = typeof converter === "function" ? converter.call(viewport, rect) : rect;
-  const [x0, y0, x1, y1] = converted.map(Number);
+  const conv = Array.isArray(converted)
+    ? converted
+    : Array.from(converted as ArrayLike<number>);
+  const [x0, y0, x1, y1] = conv.slice(0, 4).map(Number);
   if (![x0, y0, x1, y1].every(Number.isFinite)) {
     return null;
   }
@@ -810,6 +951,20 @@ function textItemRect(item: unknown, viewport: unknown, index: number): TextItem
     width: Math.max(1, Math.abs(x1 - x0)),
     height: Math.max(1, Math.abs(y1 - y0)),
   };
+}
+
+function multiplyTransform(left: number[], right: number[]): number[] | null {
+  if (![...left.slice(0, 6), ...right.slice(0, 6)].every(Number.isFinite)) {
+    return null;
+  }
+  return [
+    left[0] * right[0] + left[2] * right[1],
+    left[1] * right[0] + left[3] * right[1],
+    left[0] * right[2] + left[2] * right[3],
+    left[1] * right[2] + left[3] * right[3],
+    left[0] * right[4] + left[2] * right[5] + left[4],
+    left[1] * right[4] + left[3] * right[5] + left[5],
+  ];
 }
 
 function normalizeTextForMatch(value: string): string {
