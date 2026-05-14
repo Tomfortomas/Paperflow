@@ -136,7 +136,7 @@ Paperflow 当前只支持 DeepSeek 作为 Agent API provider。
 | `DEEPSEEK_API_KEY` | 是 | 无 | 后端 PaperAgent 使用的 DeepSeek API Key。 |
 | `DEEPSEEK_BASE_URL` | 否 | `https://api.deepseek.com/beta` | DeepSeek-compatible chat completions endpoint root。 |
 | `DEEPSEEK_MODEL` | 否 | `deepseek-v4-flash` | 阅读报告默认模型。 |
-| `DEEPSEEK_REPORT_READ_TIMEOUT` | 否 | `90` | 报告生成 read timeout，单位秒。 |
+| `DEEPSEEK_REPORT_READ_TIMEOUT` | 否 | `180` | 报告生成 read timeout，单位秒。 |
 | `DEEPSEEK_CONFIG_PATH` | 否 | `~/.deepseek/config.toml` | 自定义配置文件路径。 |
 
 配置文件示例：
@@ -165,7 +165,7 @@ pip install -e '.[dev]'
 
 export DEEPSEEK_API_KEY="your-key"
 export DEEPSEEK_MODEL="deepseek-v4-flash"
-export DEEPSEEK_REPORT_READ_TIMEOUT="90"
+export DEEPSEEK_REPORT_READ_TIMEOUT="180"
 
 uvicorn app.main:app --reload
 ```

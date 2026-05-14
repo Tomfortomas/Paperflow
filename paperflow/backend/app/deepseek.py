@@ -15,7 +15,7 @@ from app.models import AgentRunMetrics, ReadingReport, ReportSection
 REPORT_TEXT_BUDGET = 12000
 BRIEFING_TEXT_BUDGET = 18000
 MAX_PARALLEL_CHUNKS = 4
-REPORT_READ_TIMEOUT_SECONDS = 90.0
+REPORT_READ_TIMEOUT_SECONDS = 180.0
 DEEPSEEK_MODEL_OPTIONS = [
     "deepseek-v4-flash",
     "deepseek-v4-pro",

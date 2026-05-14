@@ -137,7 +137,7 @@ The fastest setup is `DEEPSEEK_API_KEY`.
 | `DEEPSEEK_API_KEY` | Yes | none | DeepSeek API key used by the backend PaperAgent. |
 | `DEEPSEEK_BASE_URL` | No | `https://api.deepseek.com/beta` | DeepSeek-compatible chat completions endpoint root. |
 | `DEEPSEEK_MODEL` | No | `deepseek-v4-flash` | Model used for Reading Report generation. |
-| `DEEPSEEK_REPORT_READ_TIMEOUT` | No | `90` | Read timeout in seconds for report generation. |
+| `DEEPSEEK_REPORT_READ_TIMEOUT` | No | `180` | Read timeout in seconds for report generation. |
 | `DEEPSEEK_CONFIG_PATH` | No | `~/.deepseek/config.toml` | Alternate config file path. |
 
 Example config file:
@@ -166,7 +166,7 @@ pip install -e '.[dev]'
 
 export DEEPSEEK_API_KEY="your-key"
 export DEEPSEEK_MODEL="deepseek-v4-flash"
-export DEEPSEEK_REPORT_READ_TIMEOUT="90"
+export DEEPSEEK_REPORT_READ_TIMEOUT="180"
 
 uvicorn app.main:app --reload
 ```

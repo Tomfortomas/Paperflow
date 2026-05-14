@@ -84,7 +84,7 @@ def test_deepseek_report_prompt_requires_chinese_explanations(monkeypatch) -> No
     assert "code is open-sourced" in chunk_prompt
     assert "paper_briefing:" in chunk_prompt
     assert any("coordinator" in prompt.lower() for prompt in captured["prompts"])
-    assert captured["timeout"].read == 90
+    assert captured["timeout"].read == 180
     assert report.paper_title == "Evidence-Aware Workflows"
     assert report.agent_run is not None
     assert report.agent_run.model == "deepseek-v4-flash"

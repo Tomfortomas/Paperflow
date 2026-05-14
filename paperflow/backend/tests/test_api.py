@@ -6,7 +6,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 from app.main import DEFAULT_STORAGE_ROOT, _resolve_storage_root, create_app, extract_arxiv_id
-from app.deepseek import set_report_read_timeout_seconds
+from app.deepseek import report_read_timeout_seconds, set_report_read_timeout_seconds
 from app.metadata import MetadataError
 from app.models import ImportSourceType, PaperMetadata, ReadingReport, TaskStatus
 from app.report_service import ReportService
@@ -413,7 +413,7 @@ def test_processing_status_surfaces_deepseek_wait_context(tmp_path: Path) -> Non
     assert status["progress"] >= 0.35
     assert "DeepSeek report generation is running" in status["message"]
     assert "model=deepseek-v4-flash" in status["message"]
-    assert "timeout=90s" in status["message"]
+    assert f"timeout={report_read_timeout_seconds():g}s" in status["message"]
     blocking_service.release.set()
 
 
@@ -700,9 +700,10 @@ class BlockingDeepSeekProgressService:
 
     def generate_report(self, session, on_progress=None) -> ReadingReport:
         if on_progress is not None:
+            timeout = report_read_timeout_seconds()
             on_progress(
                 "DeepSeek report generation is running "
-                "(model=deepseek-v4-flash, timeout=90s, input=18 chars)"
+                f"(model=deepseek-v4-flash, timeout={timeout:g}s, input=18 chars)"
             )
         self.started.set()
         self.release.wait(timeout=5)

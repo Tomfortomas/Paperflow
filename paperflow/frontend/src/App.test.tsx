@@ -675,7 +675,7 @@ describe("Paperflow app", () => {
       status: {
         stage: "processing",
         message:
-          "DeepSeek report generation is running (model=deepseek-v4-flash, timeout=90s, input=48.2k/48.2k chars)",
+          "DeepSeek report generation is running (model=deepseek-v4-flash, timeout=180s, input=48.2k/48.2k chars)",
         progress: 0.35,
       },
     };
@@ -693,8 +693,8 @@ describe("Paperflow app", () => {
     expect(screen.getByText(/文本已抽取/)).toBeInTheDocument();
     expect(screen.getByText(/请求已组装/)).toBeInTheDocument();
     expect(screen.getAllByText(/模型 deepseek-v4-flash/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/超时 90s/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/timeout 90s/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/超时 180s/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/timeout 180s/)).not.toBeInTheDocument();
     expect(screen.getAllByText(/将处理 PDF 文本 48.2k 字符/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/已覆盖 PDF 全文 48.2k 字符/)).not.toBeInTheDocument();
     expect(screen.queryByText(/报告可能不完整/)).not.toBeInTheDocument();
@@ -795,7 +795,7 @@ describe("Paperflow app", () => {
         mode: "deepseek",
         model: "deepseek-v4-flash",
         model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
-        report_read_timeout: 90,
+        report_read_timeout: 180,
       }),
       updateAgentConfig: vi.fn().mockResolvedValue({
         configured: true,
@@ -809,7 +809,7 @@ describe("Paperflow app", () => {
 
     render(<App client={client} />);
 
-    expect(await screen.findByText(/deepseek-v4-flash · 90s/)).toBeInTheDocument();
+    expect(await screen.findByText(/deepseek-v4-flash · 180s/)).toBeInTheDocument();
     await user.click(screen.getByText(/^Agent 配置$/i));
     await user.click(await screen.findByRole("button", { name: /Pro/i }));
     const timeoutInput = screen.getByLabelText(/报告超时/i);
@@ -837,7 +837,7 @@ describe("Paperflow app", () => {
         mode: "missing-key",
         model: null,
         model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
-        report_read_timeout: 90,
+        report_read_timeout: 180,
       }),
       updateAgentConfig: vi.fn().mockResolvedValue({
         configured: true,
@@ -845,7 +845,7 @@ describe("Paperflow app", () => {
         mode: "deepseek",
         model: "deepseek-v4-flash",
         model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
-        report_read_timeout: 90,
+        report_read_timeout: 180,
       }),
     });
 
@@ -858,7 +858,7 @@ describe("Paperflow app", () => {
     expect(client.updateAgentConfig).toHaveBeenCalledWith({
       api_key: "sk-local-test",
       model: "",
-      report_read_timeout: 90,
+      report_read_timeout: 180,
     });
     expect(screen.queryByDisplayValue("sk-local-test")).not.toBeInTheDocument();
   });
@@ -907,7 +907,7 @@ function fakeClient(overrides: Partial<PaperflowClient> = {}): PaperflowClient {
       mode: "injected",
       model: null,
       model_options: ["deepseek-v4-flash", "deepseek-v4-pro"],
-      report_read_timeout: 90,
+      report_read_timeout: 180,
     }),
     updateAgentConfig: vi.fn(),
     ...overrides,

@@ -1912,7 +1912,7 @@ function AgentConfigPanel({
   const modelOptions = Array.isArray(config.model_options) ? config.model_options : [];
   const modelValue = String(draft.model ?? config.model ?? "");
   const apiKeyValue = String(draft.api_key ?? "");
-  const timeoutValue = String(draft.report_read_timeout ?? config.report_read_timeout ?? 90);
+  const timeoutValue = String(draft.report_read_timeout ?? config.report_read_timeout ?? 180);
   const modelChoices = Array.from(new Set([modelValue, ...modelOptions].filter(Boolean)));
   const timeoutChoices = [45, 90, 120, 180];
   const messageKind =
