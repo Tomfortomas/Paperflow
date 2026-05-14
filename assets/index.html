@@ -20,6 +20,8 @@
         --accent: #8a3d22;
         --accent-soft: #f3ded0;
         --green: #3a7658;
+        --green-soft: #e8f2eb;
+        --shadow: rgba(73, 54, 30, 0.14);
       }
 
       * {
@@ -39,15 +41,47 @@
       main {
         width: min(1120px, calc(100% - 40px));
         margin: 0 auto;
-        padding: 56px 0 64px;
+        padding: 28px 0 64px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 44px;
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .brand {
+        color: var(--ink);
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-decoration: none;
+        text-transform: uppercase;
+      }
+
+      .nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      .nav-links a {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
       }
 
       .hero {
         display: grid;
-        grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+        grid-template-columns: minmax(0, 1.08fr) minmax(280px, 0.92fr);
         gap: clamp(28px, 5vw, 72px);
         align-items: center;
-        min-height: 72vh;
+        min-height: 64vh;
       }
 
       .eyebrow,
@@ -66,7 +100,7 @@
       }
 
       h1 {
-        max-width: 12ch;
+        max-width: 10ch;
         margin: 14px 0 20px;
         font-size: clamp(48px, 9vw, 104px);
         font-weight: 500;
@@ -79,6 +113,15 @@
         margin: 0 0 28px;
         color: var(--muted);
         font-size: clamp(18px, 2.4vw, 24px);
+      }
+
+      .question {
+        max-width: 760px;
+        margin: 0 0 18px;
+        font-size: clamp(28px, 4.4vw, 54px);
+        font-weight: 500;
+        letter-spacing: -0.04em;
+        line-height: 0.98;
       }
 
       .actions {
@@ -105,12 +148,17 @@
         color: var(--paper);
       }
 
+      .button:hover,
+      .nav-links a:hover {
+        color: var(--accent);
+      }
+
       .visual {
         position: relative;
         padding: 18px;
         border: 1px solid var(--rule);
         background: rgba(255, 250, 241, 0.72);
-        box-shadow: 0 24px 80px rgba(73, 54, 30, 0.12);
+        box-shadow: 0 24px 80px var(--shadow);
       }
 
       .visual img {
@@ -136,11 +184,36 @@
         font-weight: 700;
       }
 
+      .proof {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 42px;
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .proof span {
+        min-height: 72px;
+        padding: 14px;
+        border: 1px solid var(--rule);
+        background: var(--card);
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .proof strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--green);
+        font-size: 16px;
+      }
+
       .grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 16px;
-        margin-top: 44px;
+        margin-top: 28px;
       }
 
       .card {
@@ -165,6 +238,38 @@
         color: var(--muted);
       }
 
+      .workflow {
+        margin-top: 54px;
+        padding: clamp(22px, 4vw, 34px);
+        border: 1px solid var(--rule);
+        background: var(--card);
+      }
+
+      .workflow h2 {
+        max-width: 780px;
+        margin: 0 0 20px;
+        font-size: clamp(28px, 4vw, 46px);
+        font-weight: 500;
+        letter-spacing: -0.04em;
+        line-height: 1;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 8px;
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .flow span {
+        padding: 12px;
+        border: 1px solid var(--rule);
+        background: var(--paper);
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
       footer {
         margin-top: 44px;
         padding-top: 24px;
@@ -175,29 +280,49 @@
 
       @media (max-width: 820px) {
         .hero,
-        .grid {
+        .grid,
+        .proof,
+        .flow {
           grid-template-columns: 1fr;
         }
 
         main {
-          padding-top: 36px;
+          padding-top: 20px;
+        }
+
+        .topbar {
+          align-items: flex-start;
+          flex-direction: column;
+          margin-bottom: 30px;
         }
       }
     </style>
   </head>
   <body>
     <main>
+      <nav class="topbar" aria-label="Primary navigation">
+        <a class="brand" href="./index.html">Paperflow</a>
+        <div class="nav-links">
+          <a href="https://github.com/shiml20/Paperflow">GitHub</a>
+          <a href="./README.html">README</a>
+          <a href="../README.zh-CN.md">Chinese README</a>
+        </div>
+      </nav>
+
       <section class="hero">
         <div>
           <p class="eyebrow">Evidence-first agentic paper workspace</p>
           <h1>Paperflow</h1>
+          <p class="question">Most AI paper summaries sound confident. Where is the evidence?</p>
           <p class="lead">
-            Read papers, verify claims, ask an Agent with context, and save durable
-            research knowledge with R0/R1/R2 reliability labels.
+            Paperflow turns a paper into a reading report you can verify: R0/R1/R2
+            reliability labels, PDF evidence highlights, grounded Agent chat, and
+            Obsidian export.
           </p>
           <div class="actions">
             <a class="button primary" href="https://github.com/shiml20/Paperflow">View on GitHub</a>
             <a class="button" href="./README.html">Read the README</a>
+            <a class="button" href="../README.zh-CN.md">Chinese README</a>
           </div>
         </div>
 
@@ -207,9 +332,27 @@
             <span class="chip">R0 / R1 / R2</span>
             <span class="chip">PDF evidence</span>
             <span class="chip">Agent chat</span>
-            <span class="chip">Field Map</span>
+            <span class="chip">Obsidian export</span>
           </div>
         </aside>
+      </section>
+
+      <section class="proof" aria-label="Reliability highlights">
+        <span><strong>R0</strong>Paper-grounded claims</span>
+        <span><strong>R1</strong>External source context</span>
+        <span><strong>R2</strong>Clearly marked inference</span>
+        <span><strong>Local</strong>PDFs, reports, and notes stay portable</span>
+      </section>
+
+      <section class="workflow" aria-label="Paperflow workflow">
+        <h2>Import a paper. Read the report. Jump back to the proof.</h2>
+        <div class="flow">
+          <span>Import PDF or arXiv</span>
+          <span>Agent Reading Report</span>
+          <span>PDF Evidence Highlight</span>
+          <span>Grounded Agent Chat</span>
+          <span>Obsidian Export</span>
+        </div>
       </section>
 
       <section class="grid" aria-label="Core features">
