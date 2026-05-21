@@ -51,6 +51,7 @@ from app.models import (
     TaskStatus,
 )
 from app.obsidian import render_field_map_note, render_obsidian_note
+from app.notion import create_paper_notion_page, create_field_map_notion_page
 from app.pdf_parser import load_chunks, parse_pdf, save_chunks
 from app.r1_search import R1SearchPipeline
 from app.refs_parser import extract_references_from_parsed
@@ -114,6 +115,10 @@ class ZoteroImportRequest(BaseModel):
 
 class ExportResponse(BaseModel):
     note_path: str
+
+
+class NotionExportResponse(BaseModel):
+    page_url: str
 
 
 class AgentConfigRequest(BaseModel):
@@ -265,7 +270,7 @@ def _answer_chat_from_report(
         )
         return Claim(
             id="chat-answer",
-            text=f"基于你选中的证据，Agent 将问题限定在这段原文内：{request.quote.strip()[:180]}",
+            text=f"鍩轰簬浣犻€変腑鐨勮瘉鎹紝Agent 灏嗛棶棰橀檺瀹氬湪杩欐鍘熸枃鍐咃細{request.quote.strip()[:180]}",
             reliability=ReliabilityLevel.R0,
             evidence=[evidence],
         )
@@ -949,6 +954,22 @@ def create_app(
         note_path = storage.save_note(paper_id, markdown)
         return ExportResponse(note_path=str(note_path))
 
+
+    @app.post("/api/papers/{paper_id}/export-notion")
+    def export_notion(paper_id: str):
+        try:
+            report = reports.get(paper_id) or storage.load_report(paper_id)
+        except FileNotFoundError:
+            report = None
+        paper = next((candidate for candidate in storage.list_papers() if candidate.id == paper_id), None)
+        if not report or not paper:
+            raise HTTPException(status_code=404, detail="Paper or report not found")
+        try:
+            page_url = create_paper_notion_page(paper, report)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        return NotionExportResponse(page_url=page_url)
+
     # ----------------------------------------------------------- Phase 4: Field Map
 
     def _build_field_map_for_paper(paper_id: str, *, run_r1_if_missing: bool = True) -> FieldMap:
@@ -1048,7 +1069,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Field map not found")
         try:
             field_map = FieldMap.model_validate(cached)
-        except Exception as exc:  # pragma: no cover — bad cache shape is rare
+        except Exception as exc:  # pragma: no cover 鈥?bad cache shape is rare
             raise HTTPException(status_code=500, detail=f"Field map cache corrupted: {exc}")
         markdown = render_field_map_note(field_map)
         notes_dir = storage.note_dir
@@ -1057,6 +1078,22 @@ def create_app(
         path = notes_dir / note_name
         path.write_text(markdown, encoding="utf-8")
         return ExportResponse(note_path=str(path))
+
+
+    @app.post("/api/field-maps/{field_map_id}/export-notion")
+    def export_field_map_notion(field_map_id: str):
+        cached = storage.load_field_map(field_map_id)
+        if cached is None:
+            raise HTTPException(status_code=404, detail="Field map not found")
+        try:
+            field_map = FieldMap.model_validate(cached)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Field map cache corrupted: {exc}")
+        try:
+            page_url = create_field_map_notion_page(field_map)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        return NotionExportResponse(page_url=page_url)
 
     # ----------------------------------------------------------- Phase 5: Insights
 
@@ -1163,3 +1200,6 @@ def _safe_arxiv_name(arxiv_id: str) -> str:
 
 # Kept for older imports.
 safe_arxiv_name = _safe_arxiv_name
+
+
+

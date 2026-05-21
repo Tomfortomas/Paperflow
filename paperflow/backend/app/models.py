@@ -196,7 +196,7 @@ class MilestoneCategory(str, Enum):
 class MilestonePaper(BaseModel):
     """One milestone paper produced by the milestone detector.
 
-    The fields mirror PRD §4.6 — score, category, evidence and risk are all
+    The fields mirror PRD 搂4.6 鈥?score, category, evidence and risk are all
     first-class so the UI can show ``why milestone`` next to it.
     """
 
@@ -231,7 +231,7 @@ class TimelineEventType(str, Enum):
 
 
 class TimelineEvent(BaseModel):
-    """One ordered entry on the technology timeline (PRD §4.7)."""
+    """One ordered entry on the technology timeline (PRD 搂4.7)."""
 
     id: str
     year: Optional[int] = None
@@ -275,14 +275,14 @@ class FieldMapGraphEdge(BaseModel):
 
 
 class FieldMapRelationshipGraph(BaseModel):
-    """Left-to-right predecessor → seed → successor graph."""
+    """Left-to-right predecessor 鈫?seed 鈫?successor graph."""
 
     nodes: List[FieldMapGraphNode] = Field(default_factory=list)
     edges: List[FieldMapGraphEdge] = Field(default_factory=list)
 
 
 class ComparisonCell(BaseModel):
-    """One cell in a multi-paper comparison table (PRD §4.9)."""
+    """One cell in a multi-paper comparison table (PRD 搂4.9)."""
 
     paper_id: str
     paper_title: Optional[str] = None
@@ -292,13 +292,13 @@ class ComparisonCell(BaseModel):
 
 
 class ComparisonRow(BaseModel):
-    dimension: str  # "Task", "Dataset", "Benchmark / metric", …
+    dimension: str  # "Task", "Dataset", "Benchmark / metric", 鈥?
     description: Optional[str] = None
     cells: List[ComparisonCell] = Field(default_factory=list)
 
 
 class ComparisonTable(BaseModel):
-    """Aggregated multi-paper comparison (PRD §4.9)."""
+    """Aggregated multi-paper comparison (PRD 搂4.9)."""
 
     id: str
     paper_ids: List[str] = Field(default_factory=list)
@@ -336,11 +336,12 @@ class AgentTaskKind(str, Enum):
     COMPARE = "compare"
     INSIGHT = "insight"
     OBSIDIAN = "obsidian"
+    NOTION = "notion"
     OTHER = "other"
 
 
 class AgentTask(BaseModel):
-    """Persistent record of a long-running task (PRD §8 long-task contract)."""
+    """Persistent record of a long-running task (PRD 搂8 long-task contract)."""
 
     id: str
     kind: AgentTaskKind = AgentTaskKind.OTHER
@@ -356,7 +357,7 @@ class AgentTask(BaseModel):
 
 
 class FieldMap(BaseModel):
-    """Aggregated domain-level artifact (PRD §4.8).
+    """Aggregated domain-level artifact (PRD 搂4.8).
 
     Fields mirror the PRD: factual sections are R1, trend / opportunity
     sections are R2 and the UI hides R2 by default.
@@ -379,3 +380,4 @@ class FieldMap(BaseModel):
     evidence_index: List[Evidence] = Field(default_factory=list)
     relationship_graph: FieldMapRelationshipGraph = Field(default_factory=FieldMapRelationshipGraph)
     generated_at: Optional[float] = None
+
